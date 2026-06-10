@@ -91,7 +91,7 @@ export async function getRevenueCatData(
     };
   } catch (e) {
     const fallback = sampleRevenueCat(range);
-    fallback.error = e instanceof Error ? e.message : "RevenueCat request failed";
+    fallback.error = `RevenueCat: ${e instanceof Error ? e.message : "request failed"}`;
     return fallback;
   }
 }

@@ -27,6 +27,36 @@ const API_BASE = "https://api.searchads.apple.com/api/v5";
 
 type Env = Record<string, string | undefined>;
 
+/**
+ * Rebuild a valid PEM from whatever paste format arrived: literal "\n",
+ * CRLF, single-line keys (newlines stripped by chat/email), surrounding
+ * quotes, or bare base64 with no header. OpenSSL needs the 64-char wrap.
+ */
+export function normalizePem(input: string): string {
+  let s = input
+    .trim()
+    .replace(/^["']+|["']+$/g, "")
+    .replace(/\\n/g, "\n")
+    .replace(/\r/g, "");
+
+  const m = s.match(/-----BEGIN ([A-Z0-9 ]+)-----([\s\S]*?)-----END \1-----/);
+  if (m) {
+    const label = m[1];
+    const body = m[2].replace(/\s/g, "");
+    const wrapped = body.match(/.{1,64}/g)?.join("\n") ?? body;
+    return `-----BEGIN ${label}-----\n${wrapped}\n-----END ${label}-----\n`;
+  }
+
+  // Bare base64 with no header — assume PKCS#8 private key.
+  const bare = s.replace(/\s/g, "");
+  if (/^[A-Za-z0-9+/=]+$/.test(bare) && bare.length > 100) {
+    const wrapped = bare.match(/.{1,64}/g)!.join("\n");
+    return `-----BEGIN PRIVATE KEY-----\n${wrapped}\n-----END PRIVATE KEY-----\n`;
+  }
+
+  return s;
+}
+
 function creds(env: Env) {
   const {
     ASA_CLIENT_ID,
@@ -45,11 +75,11 @@ function creds(env: Env) {
     return null;
   }
   return {
-    clientId: ASA_CLIENT_ID,
-    teamId: ASA_TEAM_ID,
-    keyId: ASA_KEY_ID,
-    orgId: ASA_ORG_ID,
-    privateKey: ASA_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    clientId: ASA_CLIENT_ID.trim(),
+    teamId: ASA_TEAM_ID.trim(),
+    keyId: ASA_KEY_ID.trim(),
+    orgId: ASA_ORG_ID.trim(),
+    privateKey: normalizePem(ASA_PRIVATE_KEY),
   };
 }
 
@@ -316,7 +346,10 @@ export async function getAsaData(range: DateRange, env: Env): Promise<AsaData> {
   } catch (e) {
     // Creds present but the call failed — show sample data, but surface the error.
     const fallback = sampleAsa(range);
-    fallback.error = e instanceof Error ? e.message : "ASA request failed";
+    const msg = e instanceof Error ? e.message : "request failed";
+    fallback.error = /DECODER|asn1|PEM|importPKCS8|private key/i.test(msg)
+      ? `Apple Search Ads: the private key could not be parsed — re-paste the full .pem file contents (including BEGIN/END lines). (${msg})`
+      : `Apple Search Ads: ${msg}`;
     return fallback;
   }
 }

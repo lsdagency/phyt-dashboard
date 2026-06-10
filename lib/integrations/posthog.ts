@@ -94,7 +94,7 @@ export async function getPostHogData(
     };
   } catch (e) {
     const fallback = samplePostHog(range);
-    fallback.error = e instanceof Error ? e.message : "PostHog request failed";
+    fallback.error = `PostHog: ${e instanceof Error ? e.message : "request failed"}`;
     return fallback;
   }
 }
