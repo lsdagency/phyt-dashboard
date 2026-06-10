@@ -1,0 +1,9 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# The daily client email is a scheduled function — its cron lives in
+# netlify/functions/daily-email.mts (export const config.schedule = "0 7 * * *").

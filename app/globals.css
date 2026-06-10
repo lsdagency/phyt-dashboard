@@ -1,0 +1,42 @@
+/* Clash Grotesk — free via Fontshare (Indian Type Foundry). 400 = body, 700 = heavy headers. */
+@import url("https://api.fontshare.com/v2/css?f[]=clash-grotesk@400,500,600,700&display=swap");
+@import "tailwindcss";
+
+/* PHYT brand design tokens — exposed to Tailwind as utilities (bg-phyt-yellow, text-phyt-ink, etc.) */
+@theme {
+  --color-phyt-white: #ffffff;
+  --color-phyt-ink: #002e29;
+  --color-phyt-yellow: #f7e04a;
+  --color-phyt-green: #4ecc7c;
+  --color-phyt-pink: #f6b0c6;
+  --color-phyt-blue: #99daef;
+
+  /* Soft tints for surfaces/cards built from the accents */
+  --color-phyt-yellow-soft: #fdf6c9;
+  --color-phyt-green-soft: #d9f4e4;
+  --color-phyt-pink-soft: #fce4eb;
+  --color-phyt-blue-soft: #e3f4fb;
+
+  --font-display: "Clash Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Clash Grotesk", ui-sans-serif, system-ui, sans-serif;
+}
+
+html,
+body {
+  background: var(--color-phyt-white);
+  color: var(--color-phyt-ink);
+  font-family: var(--font-sans);
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Headers default to Clash Grotesk heavy */
+h1,
+h2,
+h3,
+h4,
+.font-display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
