@@ -1,10 +1,24 @@
 import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
+import { getConnectionString } from "@netlify/database";
 import * as schema from "./schema";
 
-// DATABASE_URL (explicit, e.g. your own Neon) wins; otherwise use Netlify DB's
-// auto-provisioned connection string (Neon under the hood, same driver).
-const url = process.env.DATABASE_URL || process.env.NETLIFY_DATABASE_URL;
+// Resolution order: explicit DATABASE_URL (your own Neon) → NETLIFY_DATABASE_URL
+// env var → Netlify DB's runtime resolver (throws outside a Netlify environment,
+// hence the guard). All three are Neon Postgres, same driver.
+function resolveUrl(): string | undefined {
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+  if (process.env.NETLIFY_DATABASE_URL) return process.env.NETLIFY_DATABASE_URL;
+  try {
+    const cs = getConnectionString();
+    if (typeof cs === "string" && cs.length > 0) return cs;
+  } catch {
+    // Not running on Netlify — no database configured.
+  }
+  return undefined;
+}
+
+const url = resolveUrl();
 
 /** True once a Neon connection string is configured. Callers fall back to sample data when false. */
 export const dbAvailable = Boolean(url);
