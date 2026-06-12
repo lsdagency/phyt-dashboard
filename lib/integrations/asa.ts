@@ -287,7 +287,11 @@ export async function getAsaData(range: DateRange, env: Env): Promise<AsaData> {
       topCampaigns.map(async (camp) => {
         const [kw, st] = await Promise.all([
           postReport(c, `/reports/campaigns/${camp.id}/keywords`, reportBody(range)).catch(() => null),
-          postReport(c, `/reports/campaigns/${camp.id}/searchterms`, reportBody(range)).catch((e) => {
+          // Search-term reports only accept timeZone ORTZ (UTC → 400 INVALID_INPUT).
+          postReport(c, `/reports/campaigns/${camp.id}/searchterms`, {
+            ...reportBody(range),
+            timeZone: "ORTZ",
+          }).catch((e) => {
             searchTermErrors.push(
               `${camp.name}: ${e instanceof Error ? e.message.slice(0, 200) : "request failed"}`,
             );
