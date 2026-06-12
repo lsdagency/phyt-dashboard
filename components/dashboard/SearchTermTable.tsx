@@ -44,7 +44,9 @@ export default function SearchTermTable({ data }: { data: DashboardData }) {
           {rows.map((x, i) => (
             <tr key={`${x.searchTerm}-${i}`} className="border-b border-phyt-ink/5 hover:bg-phyt-ink/[0.015]">
               <td className="px-3 py-2.5">
-                <div className="font-medium">{x.searchTerm}</div>
+                <div className={x.searchTerm ? "font-medium" : "italic text-phyt-ink/45"}>
+                  {x.searchTerm || "Hidden by Apple (low-volume term)"}
+                </div>
                 <div className="text-[11px] text-phyt-ink/50">
                   {x.matchedKeyword ? `matched: ${x.matchedKeyword} · ` : ""}
                   {x.matchType} · {x.campaignName}
