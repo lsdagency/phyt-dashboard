@@ -85,6 +85,7 @@ export interface AsaSearchTerm {
 export interface AsaData {
   source: SourceMode;
   error?: string;
+  searchTermsError?: string; // search-term report failed even though campaigns/keywords loaded
   currency: string;
   totals: AsaTotals;
   campaigns: AsaCampaign[];

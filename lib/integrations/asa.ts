@@ -281,12 +281,18 @@ export async function getAsaData(range: DateRange, env: Env): Promise<AsaData> {
 
     const keywords: AsaKeyword[] = [];
     const searchTerms: AsaSearchTerm[] = [];
+    const searchTermErrors: string[] = [];
 
     await Promise.all(
       topCampaigns.map(async (camp) => {
         const [kw, st] = await Promise.all([
           postReport(c, `/reports/campaigns/${camp.id}/keywords`, reportBody(range)).catch(() => null),
-          postReport(c, `/reports/campaigns/${camp.id}/searchterms`, reportBody(range)).catch(() => null),
+          postReport(c, `/reports/campaigns/${camp.id}/searchterms`, reportBody(range)).catch((e) => {
+            searchTermErrors.push(
+              `${camp.name}: ${e instanceof Error ? e.message.slice(0, 200) : "request failed"}`,
+            );
+            return null;
+          }),
         ]);
 
         for (const row of (kw as KeywordReport)?.data?.reportingDataResponse?.row ?? []) {
@@ -341,6 +347,12 @@ export async function getAsaData(range: DateRange, env: Env): Promise<AsaData> {
       campaigns,
       keywords: keywords.sort((a, b) => b.spend - a.spend),
       searchTerms: searchTerms.sort((a, b) => b.spend - a.spend),
+      // Only flag when the report failed outright — an empty-but-successful
+      // report usually means Apple's ~10-impression privacy threshold.
+      searchTermsError:
+        searchTerms.length === 0 && searchTermErrors.length > 0
+          ? searchTermErrors[0]
+          : undefined,
       timeseries,
     };
   } catch (e) {

@@ -5,6 +5,26 @@ export default function SearchTermTable({ data }: { data: DashboardData }) {
   const c = data.currency;
   const rows = [...data.asa.searchTerms].sort((a, b) => b.spend - a.spend);
 
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-2xl border border-phyt-ink/10 bg-phyt-blue-soft/40 px-5 py-6 text-sm text-phyt-ink/70">
+        {data.asa.searchTermsError ? (
+          <>
+            <strong>Search-term report failed to load.</strong>{" "}
+            <span className="text-phyt-ink/60">{data.asa.searchTermsError}</span>
+          </>
+        ) : (
+          <>
+            <strong>No search terms reported for this period.</strong> Apple only
+            includes terms with roughly 10+ impressions, so short ranges or
+            low-volume days can be empty — try a longer date range. Terms also
+            only come from broad match and Search Match traffic.
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="overflow-x-auto rounded-2xl border border-phyt-ink/10">
       <table className="w-full min-w-[900px] text-sm">
