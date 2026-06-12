@@ -37,13 +37,17 @@ async function hogql<T = unknown[]>(
   return json.results ?? [];
 }
 
-// Trial starts: RevenueCat's forwarded event or anything like "trial_started".
-const TRIAL_START_RE = /^\$rc_trial_started$|trial.*(start|begin)|^(start|begin).*trial/i;
-// New paid subscriptions: RC initial purchase / trial conversion, or app-side
-// "subscription started/purchased" style events. Renewals/cancellations excluded.
+// Events that are never new-conversion signals (checked first). Includes
+// non_subscription purchases (one-off IAPs) and paused/billing-issue states.
+const NEGATIVE_RE =
+  /renew|cancel|expir|fail|restor|refund|view|screen|tap|click|pause|non_subscription|billing/i;
+// Trial starts: RevenueCat's forwarded event (with or without $/_event affixes,
+// e.g. PHYT's "rc_trial_started_event") or anything like "trial_started".
+const TRIAL_START_RE = /trial.*(start|begin)|^(start|begin).*trial/i;
+// New paid subscriptions: trial conversions count here (a converted trial IS a
+// new paying sub), plus initial purchases and "subscription started" styles.
 const SUB_START_RE =
-  /^\$rc_(initial_purchase|trial_converted)$|subscri.*(start|purchas|activat|convert)|initial.*purchase|^purchase(_completed)?$/i;
-const NEGATIVE_RE = /renew|cancel|expir|fail|restor|refund|view|screen|tap|click/i;
+  /trial.*convert|initial.*purchase|subscri.*(start|purchas|activat)|^\$?rc_initial_purchase(_event)?$|^purchase(_completed)?$/i;
 
 function classifyConversions(events: { event: string; count: number }[]) {
   let trialsStarted = 0;
