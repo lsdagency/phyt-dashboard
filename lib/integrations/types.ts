@@ -127,6 +127,11 @@ export interface PostHogData {
   retentionRate: number; // % (day-7 style, sampled)
   topEvents: PostHogEventCount[];
   timeseries: SeriesPoint[]; // { date, activeUsers, events }
+  // Period conversion counts from trial/purchase events (incl. RevenueCat's
+  // forwarded $rc_* events). Undefined in sample mode.
+  trialsStarted?: number;
+  subscriptionsStarted?: number;
+  conversionEvents?: PostHogEventCount[]; // the matched events, for mapping/debugging
 }
 
 // ---------- LTV ----------

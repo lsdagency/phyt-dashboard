@@ -108,6 +108,17 @@ export async function getDashboardData(
     listKpis(),
   ]);
 
+  // Period trial/sub starts: RevenueCat's overview can't provide them, so use
+  // PostHog conversion events when live (the only range-scoped source we have).
+  if (posthog.source === "live") {
+    if (!revenueCat.trialsStarted) {
+      revenueCat.trialsStarted = posthog.trialsStarted ?? 0;
+    }
+    if (!revenueCat.subscriptionsStarted) {
+      revenueCat.subscriptionsStarted = posthog.subscriptionsStarted ?? 0;
+    }
+  }
+
   // Attach revenue-derived fields (cost per trial/sub, LTV:CAC) + blended LTV.
   const ltv = deriveRevenue(asa, revenueCat);
 

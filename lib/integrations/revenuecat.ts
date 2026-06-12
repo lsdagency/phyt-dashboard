@@ -80,9 +80,11 @@ export async function getRevenueCatData(
       activeSubscriptions,
       activeTrials,
       newCustomers,
-      trialsStarted: pick("trials_started", "new_trials") || sampled.trialsStarted,
-      subscriptionsStarted:
-        pick("subscriptions_started", "conversions") || sampled.subscriptionsStarted,
+      // RevenueCat's overview has no period-scoped trial/sub starts. Report 0 here;
+      // the aggregator fills these from PostHog conversion events. NEVER sample
+      // fallback inside live data — that's how fake numbers leak into real reports.
+      trialsStarted: pick("trials_started", "new_trials"),
+      subscriptionsStarted: pick("subscriptions_started", "conversions"),
       trialConversionRate: sampled.trialConversionRate,
       annualShare: knownSplit > 0 ? annualSubs / knownSplit : sampled.annualShare,
       monthlyShare: knownSplit > 0 ? monthlySubs / knownSplit : sampled.monthlyShare,

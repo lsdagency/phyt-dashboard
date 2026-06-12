@@ -37,6 +37,25 @@ async function hogql<T = unknown[]>(
   return json.results ?? [];
 }
 
+// Trial starts: RevenueCat's forwarded event or anything like "trial_started".
+const TRIAL_START_RE = /^\$rc_trial_started$|trial.*(start|begin)|^(start|begin).*trial/i;
+// New paid subscriptions: RC initial purchase / trial conversion, or app-side
+// "subscription started/purchased" style events. Renewals/cancellations excluded.
+const SUB_START_RE =
+  /^\$rc_(initial_purchase|trial_converted)$|subscri.*(start|purchas|activat|convert)|initial.*purchase|^purchase(_completed)?$/i;
+const NEGATIVE_RE = /renew|cancel|expir|fail|restor|refund|view|screen|tap|click/i;
+
+function classifyConversions(events: { event: string; count: number }[]) {
+  let trialsStarted = 0;
+  let subscriptionsStarted = 0;
+  for (const e of events) {
+    if (NEGATIVE_RE.test(e.event)) continue;
+    if (TRIAL_START_RE.test(e.event)) trialsStarted += e.count;
+    else if (SUB_START_RE.test(e.event)) subscriptionsStarted += e.count;
+  }
+  return { trialsStarted, subscriptionsStarted };
+}
+
 export async function getPostHogData(
   range: DateRange,
   env: Env,
@@ -48,7 +67,7 @@ export async function getPostHogData(
   const to = `${range.end} 23:59:59`;
 
   try {
-    const [series, top, totals] = await Promise.all([
+    const [series, top, totals, conversions] = await Promise.all([
       // Daily active users + event volume
       hogql<[string, number, number]>(
         c,
@@ -69,6 +88,15 @@ export async function getPostHogData(
         `SELECT count(DISTINCT person_id) AS users, count() AS events FROM events
          WHERE timestamp >= toDateTime('${from}') AND timestamp <= toDateTime('${to}')`,
       ),
+      // Conversion-ish events (trials, purchases, subscriptions — incl. RevenueCat $rc_*)
+      hogql<[string, number]>(
+        c,
+        `SELECT event, count() AS c FROM events
+         WHERE timestamp >= toDateTime('${from}') AND timestamp <= toDateTime('${to}')
+           AND (event ILIKE '%trial%' OR event ILIKE '%subscri%' OR event ILIKE '%purchas%'
+                OR event ILIKE '%checkout%' OR event LIKE '$rc_%')
+         GROUP BY event ORDER BY c DESC LIMIT 25`,
+      ).catch(() => [] as [string, number][]),
     ]);
 
     const timeseries: SeriesPoint[] = series.map((r) => ({
@@ -83,6 +111,12 @@ export async function getPostHogData(
       ? (timeseries[timeseries.length - 1].activeUsers as number)
       : 0;
 
+    const conversionEvents = conversions.map((r) => ({
+      event: String(r[0]),
+      count: Number(r[1]),
+    }));
+    const { trialsStarted, subscriptionsStarted } = classifyConversions(conversionEvents);
+
     return {
       source: "live",
       activeUsers,
@@ -91,6 +125,9 @@ export async function getPostHogData(
       retentionRate: samplePostHog(range).retentionRate, // requires a retention insight; sampled for now
       topEvents: top.map((r) => ({ event: String(r[0]), count: Number(r[1]) })),
       timeseries,
+      trialsStarted,
+      subscriptionsStarted,
+      conversionEvents,
     };
   } catch (e) {
     const fallback = samplePostHog(range);
