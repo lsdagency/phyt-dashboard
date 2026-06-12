@@ -15,7 +15,27 @@ import BudgetPlanner from "@/components/dashboard/BudgetPlanner";
 
 const fetcher = (u: string) => fetch(u).then((r) => r.json());
 
+const TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "campaigns", label: "Campaigns" },
+  { id: "budget", label: "Budget planner" },
+  { id: "keywords", label: "Keywords" },
+  { id: "searchterms", label: "Search terms" },
+] as const;
+type TabId = (typeof TABS)[number]["id"];
+
 export default function DashboardClient({ isAdmin }: { isAdmin: boolean }) {
+  // Tab from the URL hash so refresh/share keeps the view (#campaigns etc.).
+  const [tab, setTab] = useState<TabId>("overview");
+  useEffect(() => {
+    const fromHash = window.location.hash.replace("#", "") as TabId;
+    if (TABS.some((t) => t.id === fromHash)) setTab(fromHash);
+  }, []);
+  function switchTab(id: TabId) {
+    setTab(id);
+    window.history.replaceState(null, "", id === "overview" ? "#" : `#${id}`);
+  }
+
   const [preset, setPreset] = useState<PresetId>("last_7");
   const [custom, setCustom] = useState(() => rangeForPreset("last_7"));
   const [refreshing, setRefreshing] = useState(false);
@@ -129,43 +149,72 @@ export default function DashboardClient({ isAdmin }: { isAdmin: boolean }) {
         </div>
       )}
 
+      {/* Tab navigation */}
+      <nav className="flex flex-wrap gap-2 border-b border-phyt-ink/10 pb-3">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => switchTab(t.id)}
+            className={`rounded-full px-4 py-2 text-sm transition ${
+              tab === t.id
+                ? "bg-phyt-yellow font-display font-bold"
+                : "bg-phyt-ink/5 text-phyt-ink/70 hover:bg-phyt-ink/10"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+
       {!data && isLoading ? (
         <div className="py-20 text-center text-phyt-ink/50">Loading metrics…</div>
       ) : data ? (
         <>
-          <KpiCards data={data} />
+          {tab === "overview" && (
+            <>
+              <KpiCards data={data} />
 
-          {optimisation && (
-            <Recommendations
-              optimisation={optimisation}
+              <Section title="Trends" subtitle="Across the selected date range">
+                <Charts data={data} />
+              </Section>
+
+              {optimisation && (
+                <Recommendations
+                  optimisation={optimisation}
+                  currency={data.currency}
+                  canRegenerate={isAdmin}
+                  regenerating={regenerating}
+                  onRegenerate={regenerate}
+                />
+              )}
+            </>
+          )}
+
+          {tab === "campaigns" && (
+            <Section title="Performance by campaign" subtitle="Apple Search Ads + RevenueCat attribution">
+              <CampaignTable data={data} />
+            </Section>
+          )}
+
+          {tab === "budget" && (
+            <BudgetPlanner
+              campaigns={data.asa.campaigns}
+              days={data.asa.timeseries.length}
               currency={data.currency}
-              canRegenerate={isAdmin}
-              regenerating={regenerating}
-              onRegenerate={regenerate}
             />
           )}
 
-          <BudgetPlanner
-            campaigns={data.asa.campaigns}
-            days={data.asa.timeseries.length}
-            currency={data.currency}
-          />
+          {tab === "keywords" && (
+            <Section title="Keyword breakdown" subtitle="Bids, performance & Claude's proposed changes">
+              <KeywordTable data={data} bidOverride={bidOverride} />
+            </Section>
+          )}
 
-          <Section title="Performance by campaign" subtitle="Apple Search Ads + RevenueCat attribution">
-            <CampaignTable data={data} />
-          </Section>
-
-          <Section title="Trends" subtitle="Across the selected date range">
-            <Charts data={data} />
-          </Section>
-
-          <Section title="Keyword breakdown" subtitle="Bids, performance & Claude's proposed changes">
-            <KeywordTable data={data} bidOverride={bidOverride} />
-          </Section>
-
-          <Section title="Search-term report" subtitle="What users actually searched">
-            <SearchTermTable data={data} />
-          </Section>
+          {tab === "searchterms" && (
+            <Section title="Search-term report" subtitle="What users actually searched">
+              <SearchTermTable data={data} />
+            </Section>
+          )}
         </>
       ) : (
         <div className="py-20 text-center text-phyt-ink/50">No data.</div>
