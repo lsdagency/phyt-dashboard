@@ -1,9 +1,13 @@
+"use client";
+
 import type { DashboardData } from "@/lib/integrations/types";
 import { money, num, pct } from "@/lib/format";
+import { usePagination, PaginationControls } from "./Pagination";
 
 export default function SearchTermTable({ data }: { data: DashboardData }) {
   const c = data.currency;
   const rows = [...data.asa.searchTerms].sort((a, b) => b.spend - a.spend);
+  const pager = usePagination(rows);
 
   if (rows.length === 0) {
     return (
@@ -26,8 +30,9 @@ export default function SearchTermTable({ data }: { data: DashboardData }) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-phyt-ink/10">
-      <table className="w-full min-w-[900px] text-sm">
+    <div>
+      <div className="overflow-x-auto rounded-2xl border border-phyt-ink/10">
+        <table className="w-full min-w-[900px] text-sm">
         <thead>
           <tr className="border-b border-phyt-ink/10 bg-phyt-ink/[0.02] text-left text-[11px] uppercase tracking-wide text-phyt-ink/55">
             <th className="px-3 py-3">Search term</th>
@@ -41,7 +46,7 @@ export default function SearchTermTable({ data }: { data: DashboardData }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((x, i) => (
+          {pager.pageRows.map((x, i) => (
             <tr key={`${x.searchTerm}-${i}`} className="border-b border-phyt-ink/5 hover:bg-phyt-ink/[0.015]">
               <td className="px-3 py-2.5">
                 <div className={x.searchTerm ? "font-medium" : "italic text-phyt-ink/45"}>
@@ -62,7 +67,9 @@ export default function SearchTermTable({ data }: { data: DashboardData }) {
             </tr>
           ))}
         </tbody>
-      </table>
+        </table>
+      </div>
+      <PaginationControls {...pager} />
     </div>
   );
 }
