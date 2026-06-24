@@ -92,10 +92,13 @@ export async function getPostHogData(
         `SELECT count(DISTINCT person_id) AS users, count() AS events FROM events
          WHERE timestamp >= toDateTime('${from}') AND timestamp <= toDateTime('${to}')`,
       ),
-      // Conversion-ish events (trials, purchases, subscriptions — incl. RevenueCat $rc_*)
+      // Conversion-ish events (trials, purchases, subscriptions — incl. RevenueCat $rc_*).
+      // Count DISTINCT people, not raw occurrences: RevenueCat forwards repeated
+      // events per subscriber (status syncs, restores, re-opens), so count() over-
+      // counts dramatically against a small subscriber base.
       hogql<[string, number]>(
         c,
-        `SELECT event, count() AS c FROM events
+        `SELECT event, count(DISTINCT person_id) AS c FROM events
          WHERE timestamp >= toDateTime('${from}') AND timestamp <= toDateTime('${to}')
            AND (event ILIKE '%trial%' OR event ILIKE '%subscri%' OR event ILIKE '%purchas%'
                 OR event ILIKE '%checkout%' OR event LIKE '$rc_%')
