@@ -2,12 +2,12 @@ import { and, desc, eq, gt } from "drizzle-orm";
 import { db, dbAvailable, schema } from "../db";
 import { listKpis } from "../repo";
 import { resolveEnv } from "../credentials";
-import type { DashboardData, DateRange } from "./types";
+import type { DashboardData, DateRange, Optimisation } from "./types";
 import { getAsaData } from "./asa";
 import { getRevenueCatData } from "./revenuecat";
 import { getPostHogData } from "./posthog";
 import { deriveRevenue } from "./derive";
-import { heuristicOptimisation, applyOptimisation } from "../optimise";
+import { heuristicOptimisation, applyOptimisation, generateOptimisation } from "../optimise";
 
 export * from "./types";
 
@@ -94,10 +94,67 @@ async function cached<T extends { source: string }>(
   return data;
 }
 
+// ---- daily Claude optimisation cache ----
+// Reuses the metric_cache table (source "optimise"), keyed by range, scoped to
+// the current UTC day so Claude runs at most once per range per day. The admin
+// "Regenerate" button forces a fresh generation.
+const OPT_CACHE_SOURCE = "optimise";
+
+function startOfUtcDay(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+async function readCachedOptimisation(range: DateRange): Promise<Optimisation | null> {
+  if (!(dbAvailable && db)) return null;
+  const rows = await db
+    .select()
+    .from(schema.metricCache)
+    .where(
+      and(
+        eq(schema.metricCache.source, OPT_CACHE_SOURCE),
+        eq(schema.metricCache.cacheKey, `${range.start}_${range.end}`),
+        gt(schema.metricCache.fetchedAt, startOfUtcDay()),
+      ),
+    )
+    .orderBy(desc(schema.metricCache.fetchedAt))
+    .limit(1);
+  return rows[0] ? (rows[0].payload as Optimisation) : null;
+}
+
+async function writeCachedOptimisation(range: DateRange, opt: Optimisation) {
+  if (!(dbAvailable && db)) return;
+  await db.insert(schema.metricCache).values({
+    source: OPT_CACHE_SOURCE,
+    cacheKey: `${range.start}_${range.end}`,
+    payload: opt,
+  });
+}
+
+/**
+ * The day's optimisation for a range. With a Claude key, generates with Claude
+ * once per day (cached) and falls back to the heuristic silently on error or
+ * when no key is set. `regenerate` forces a fresh Claude call and re-caches.
+ */
+async function resolveOptimisation(
+  data: DashboardData,
+  env: Record<string, string | undefined>,
+  regenerate: boolean,
+): Promise<Optimisation> {
+  if (!env.ANTHROPIC_API_KEY) return heuristicOptimisation(data);
+  if (!regenerate) {
+    const cached = await readCachedOptimisation(data.range);
+    if (cached) return cached;
+  }
+  const opt = await generateOptimisation(data, env);
+  await writeCachedOptimisation(data.range, opt);
+  return opt;
+}
+
 /** Fetch the full normalised dashboard payload for a date range. */
 export async function getDashboardData(
   range: DateRange,
-  opts: { refresh?: boolean } = {},
+  opts: { refresh?: boolean; regenerate?: boolean } = {},
 ): Promise<DashboardData> {
   const refresh = opts.refresh ?? false;
   const env = await resolveEnv();
@@ -153,8 +210,8 @@ export async function getDashboardData(
     },
   };
 
-  // Baseline heuristic optimisation — instant, no API key needed.
-  const optimisation = heuristicOptimisation(data);
+  // Daily optimisation: Claude when a key is set (cached once/day), heuristic otherwise.
+  const optimisation = await resolveOptimisation(data, env, opts.regenerate ?? false);
   applyOptimisation(data, optimisation);
   data.optimisation = optimisation;
 

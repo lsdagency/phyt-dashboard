@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { getDashboardData, parseRange } from "@/lib/integrations";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // first load of the day may generate the Claude optimisation
 
 /** Normalised metrics for the dashboard. Any signed-in user (admin or client). */
 export async function GET(req: Request) {
