@@ -108,10 +108,16 @@ export default function KpiCards({ data }: { data: DashboardData }) {
   const allCostPerSub = allSubs ? t.spend / allSubs : null;
   const allLtvCac = allCostPerSub ? ltv.blendedLtv / allCostPerSub : null;
 
-  // PAID — ASA-attributed only. Real per-ad attribution isn't wired into the
-  // dashboard yet (RevenueCat exposes it in Charts/exports, not the API), so
-  // these are intentionally blank rather than mislabelling all conversions as paid.
-  const paid = { trials: null, subs: null, costPerTrial: null, costPerSub: null, ltvCac: null };
+  // PAID — ASA-attributed, summed from the per-campaign attribution (period).
+  const paidTrials = asa.campaigns.reduce((a, c) => a + c.trials, 0);
+  const paidSubs = asa.campaigns.reduce((a, c) => a + c.subscriptions, 0);
+  const paid = {
+    trials: paidTrials,
+    subs: paidSubs,
+    costPerTrial: paidTrials ? t.spend / paidTrials : null,
+    costPerSub: paidSubs ? t.spend / paidSubs : null,
+    ltvCac: paidSubs ? ltv.blendedLtv / (t.spend / paidSubs) : null,
+  };
 
   return (
     <div className="space-y-3">

@@ -102,6 +102,9 @@ export function heuristicOptimisation(data: DashboardData): Optimisation {
   );
   const structuralRecommendations: StructuralRecommendation[] = [];
   for (const st of [...data.asa.searchTerms].sort((a, b) => b.spend - a.spend)) {
+    // Apple redacts low-volume search-term text — skip blanks, there's nothing
+    // actionable to add or negate.
+    if (!st.searchTerm || !st.searchTerm.trim()) continue;
     if (st.installs >= 3 && !exactKeywords.has(st.searchTerm.toLowerCase())) {
       structuralRecommendations.push({
         type: "add_keyword",
