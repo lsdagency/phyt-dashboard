@@ -48,10 +48,19 @@ function Card({
 export default function KpiCards({ data }: { data: DashboardData }) {
   const { asa, revenueCat, ltv, posthog, kpis, currency } = data;
   const t = asa.totals;
+  // Paid-only view: trials/subs attributed to ASA campaigns.
   const trials = asa.campaigns.reduce((a, c) => a + c.trials, 0);
   const subs = asa.campaigns.reduce((a, c) => a + c.subscriptions, 0);
   const costPerSub = subs ? t.spend / subs : 0;
   const blendedCac = costPerSub ? ltv.blendedLtv / costPerSub : 0;
+
+  // Attributed view: all period trials/subs across channels (RevenueCat/PostHog),
+  // measured against total ad spend — not just the paid-attributed slice.
+  const allTrials = revenueCat.trialsStarted;
+  const allSubs = revenueCat.subscriptionsStarted;
+  const costPerAllTrial = allTrials ? t.spend / allTrials : 0;
+  const costPerAllSub = allSubs ? t.spend / allSubs : 0;
+  const attributedCac = costPerAllSub ? ltv.blendedLtv / costPerAllSub : 0;
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -70,11 +79,26 @@ export default function KpiCards({ data }: { data: DashboardData }) {
         value={num(subs)}
         sub={`${money(costPerSub, currency)} / sub`}
       />
+      <Card
+        label="Attributed trials"
+        value={num(allTrials)}
+        sub={`${money(costPerAllTrial, currency)} / trial · all channels`}
+      />
+      <Card
+        label="Attributed subscriptions"
+        value={num(allSubs)}
+        sub={`${money(costPerAllSub, currency)} / sub · all channels`}
+      />
       <Card label="MRR" value={money(revenueCat.mrr, currency)} />
       <Card
         label="Blended LTV : CAC"
         value={ratio(blendedCac)}
-        sub={`LTV ${money(ltv.blendedLtv, currency)}`}
+        sub={`LTV ${money(ltv.blendedLtv, currency)} · paid`}
+      />
+      <Card
+        label="Attributed LTV : CAC"
+        value={ratio(attributedCac)}
+        sub={`LTV ${money(ltv.blendedLtv, currency)} · all channels`}
       />
       <Card label="Active users" value={num(posthog.activeUsers)} sub="period" />
     </div>
