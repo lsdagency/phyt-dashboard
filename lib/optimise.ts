@@ -9,16 +9,53 @@ import type {
 
 const round = (n: number, dp = 2) => Math.round(n * 10 ** dp) / 10 ** dp;
 const MIN_BID = 0.1;
-const MIN_TAPS = 15; // below this, not enough signal to move a bid
 
 function targetCpi(data: DashboardData): number {
   return data.kpis.find((k) => k.metric === "cpa")?.target ?? 12;
 }
 
+const MAX_BIDS = 5; // surface the 5 highest-impact bid changes
+
 /**
- * Deterministic, profit-first bidding rules. Runs instantly with no API key, so
- * the dashboard's "Proposed bid" column is always populated. Optimises toward
- * LTV:CAC > 1 using the blended LTV.
+ * Decide a bid move for one keyword from its economics: cost-per-sub vs LTV
+ * first (the profit signal), then install efficiency (CPI vs target) when there
+ * are no subs yet. Returns a direction + multiplier + plain-English rationale.
+ * Always returns a call for a keyword with real spend — no "hold" — so the
+ * panel always has concrete actions to show.
+ */
+function bidDecision(
+  k: DashboardData["asa"]["keywords"][number],
+  ltv: number,
+  tCpi: number,
+): { action: "increase" | "decrease"; factor: number; rationale: string } | null {
+  if (k.spend <= 0 && k.taps <= 0) return null;
+
+  // 1. Subscription economics — strongest signal when we have conversions.
+  if (k.subscriptions >= 1 && k.costPerSub > 0) {
+    const ltvCac = ltv / k.costPerSub;
+    if (k.costPerSub <= ltv * 0.7)
+      return { action: "increase", factor: 1.2, rationale: `LTV:CAC ${ltvCac.toFixed(1)}:1 — £${k.costPerSub.toFixed(0)}/sub well under £${ltv.toFixed(0)} LTV. Scale up.` };
+    if (k.costPerSub > ltv)
+      return { action: "decrease", factor: 0.75, rationale: `£${k.costPerSub.toFixed(0)}/sub over £${ltv.toFixed(0)} LTV (LTV:CAC ${ltvCac.toFixed(1)}:1). Pull back.` };
+    return { action: "increase", factor: 1.08, rationale: `£${k.costPerSub.toFixed(0)}/sub under £${ltv.toFixed(0)} LTV (LTV:CAC ${ltvCac.toFixed(1)}:1) — modest headroom.` };
+  }
+
+  // 2. No subs yet — judge on install efficiency vs the CPI target.
+  if (k.installs === 0 && k.taps >= 5)
+    return { action: "decrease", factor: 0.7, rationale: `${k.taps} taps, £${k.spend.toFixed(0)} spent, 0 installs — cut the bid.` };
+  if (k.cpa > 0 && k.cpa > tCpi * 1.3)
+    return { action: "decrease", factor: 0.85, rationale: `CPI £${k.cpa.toFixed(2)} above £${tCpi} target, no subs — reduce.` };
+  if (k.cpa > 0 && k.cpa <= tCpi * 0.8 && k.installs >= 1)
+    return { action: "increase", factor: 1.1, rationale: `CPI £${k.cpa.toFixed(2)} under £${tCpi} target (CPT £${k.cpt.toFixed(2)}) — scale cautiously, watch for subs.` };
+  if (k.cpa > 0)
+    return { action: "decrease", factor: 0.92, rationale: `CPI £${k.cpa.toFixed(2)} near target but no subs yet — trim until it converts.` };
+  return { action: "decrease", factor: 0.9, rationale: `£${k.spend.toFixed(0)} spent with little signal (CPT £${k.cpt.toFixed(2)}) — trim and monitor.` };
+}
+
+/**
+ * Deterministic, profit-first bidding rules — no API key needed. Surfaces the
+ * top ${MAX_BIDS} bid changes (highest spend first) and the campaigns to review,
+ * driven by CPI/CPT and cost-per-trial/sub against the blended LTV.
  */
 export function heuristicOptimisation(data: DashboardData): Optimisation {
   const ltv = data.ltv.blendedLtv;
@@ -26,60 +63,38 @@ export function heuristicOptimisation(data: DashboardData): Optimisation {
   const bidRecommendations: BidRecommendation[] = [];
 
   for (const k of [...data.asa.keywords].sort((a, b) => b.spend - a.spend)) {
-    if (k.taps < MIN_TAPS) continue;
-
-    const ltvCac = k.subscriptions > 0 ? ltv / k.costPerSub : 0;
-    let factor = 0;
-    let action: "increase" | "decrease" | null = null;
-    let rationale = "";
-
-    if (k.subscriptions >= 2 && k.costPerSub <= ltv * 0.6) {
-      factor = 1.15;
-      action = "increase";
-      rationale = `Strong LTV:CAC ${ltvCac.toFixed(1)}:1 (£${k.costPerSub.toFixed(0)}/sub vs £${ltv.toFixed(0)} LTV) — scale.`;
-    } else if (k.subscriptions >= 1 && k.costPerSub > ltv) {
-      factor = 0.75;
-      action = "decrease";
-      rationale = `Cost/sub £${k.costPerSub.toFixed(0)} above £${ltv.toFixed(0)} LTV (LTV:CAC ${ltvCac.toFixed(1)}) — trim.`;
-    } else if (k.installs === 0 && k.taps >= MIN_TAPS * 2) {
-      factor = 0.7;
-      action = "decrease";
-      rationale = `£${k.spend.toFixed(0)} spent across ${k.taps} taps with 0 installs — cut back.`;
-    } else if (k.cpa > tCpi * 1.5) {
-      factor = 0.85;
-      action = "decrease";
-      rationale = `CPI £${k.cpa.toFixed(2)} well above £${tCpi} target — reduce.`;
-    } else if (k.cpa <= tCpi * 0.7 && k.installs >= 5) {
-      factor = 1.1;
-      action = "increase";
-      rationale = `Efficient CPI £${k.cpa.toFixed(2)} below £${tCpi} target — room to scale.`;
-    }
-
-    if (action) {
-      const proposedBid = Math.max(MIN_BID, round(k.bid * factor));
-      if (proposedBid !== k.bid) {
-        bidRecommendations.push({
-          keywordId: k.keywordId,
-          keyword: k.keyword,
-          campaignName: k.campaignName,
-          matchType: k.matchType,
-          currentBid: k.bid,
-          proposedBid,
-          action,
-          rationale,
-        });
-      }
-    }
+    const d = bidDecision(k, ltv, tCpi);
+    if (!d) continue;
+    const proposedBid = Math.max(MIN_BID, round(k.bid * d.factor));
+    bidRecommendations.push({
+      keywordId: k.keywordId,
+      keyword: k.keyword,
+      campaignName: k.campaignName,
+      matchType: k.matchType,
+      currentBid: k.bid,
+      proposedBid,
+      action: d.action,
+      rationale: d.rationale,
+    });
+    if (bidRecommendations.length >= MAX_BIDS) break;
   }
 
-  // Campaigns running below break-even.
-  const pauseRecommendations: PauseRecommendation[] = data.asa.campaigns
-    .filter((c) => c.status === "ENABLED" && c.subscriptions >= 1 && c.ltvCac > 0 && c.ltvCac < 0.8)
-    .map((c) => ({
-      campaignId: c.id,
-      campaignName: c.name,
-      rationale: `LTV:CAC ${c.ltvCac.toFixed(2)} on £${c.spend.toFixed(0)} spend — below break-even.`,
-    }));
+  // Campaigns to review: below break-even, spending with no subs, or CPI well
+  // over target. Ranked by spend so the costliest problems surface first.
+  const pauseRecommendations: PauseRecommendation[] = [...data.asa.campaigns]
+    .filter((c) => c.status === "ENABLED" && c.spend > 0)
+    .sort((a, b) => b.spend - a.spend)
+    .map((c): PauseRecommendation | null => {
+      if (c.subscriptions >= 1 && c.ltvCac > 0 && c.ltvCac < 1)
+        return { campaignId: c.id, campaignName: c.name, rationale: `LTV:CAC ${c.ltvCac.toFixed(2)}:1 on £${c.spend.toFixed(0)} spend — below break-even.` };
+      if (c.subscriptions === 0 && c.spend > tCpi * 3)
+        return { campaignId: c.id, campaignName: c.name, rationale: `£${c.spend.toFixed(0)} spent, 0 subs — review targeting/bids.` };
+      if (c.cpa > tCpi * 1.5)
+        return { campaignId: c.id, campaignName: c.name, rationale: `CPI £${c.cpa.toFixed(2)} well above £${tCpi} target.` };
+      return null;
+    })
+    .filter((r): r is PauseRecommendation => r !== null)
+    .slice(0, 4);
 
   // Search-term harvesting + negatives.
   const exactKeywords = new Set(

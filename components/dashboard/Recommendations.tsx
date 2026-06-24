@@ -29,12 +29,8 @@ export default function Recommendations({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <h2 className="text-2xl">Daily optimisations</h2>
-          <span
-            className={`rounded-full px-2.5 py-0.5 text-[11px] ${
-              o.generatedBy === "claude" ? "bg-phyt-blue-soft" : "bg-phyt-ink/5"
-            }`}
-          >
-            {o.generatedBy === "claude" ? `Claude${o.model ? ` · ${o.model}` : ""}` : "Heuristic baseline"}
+          <span className="rounded-full bg-phyt-ink/5 px-2.5 py-0.5 text-[11px]">
+            Rules-based
           </span>
         </div>
         {canRegenerate && (
@@ -43,7 +39,7 @@ export default function Recommendations({
             disabled={regenerating}
             className="rounded-lg bg-phyt-yellow px-3 py-2 text-sm font-display font-bold disabled:opacity-60"
           >
-            {regenerating ? "Analysing…" : "✦ Regenerate with Claude"}
+            {regenerating ? "Recalculating…" : "↻ Recalculate"}
           </button>
         )}
       </div>
