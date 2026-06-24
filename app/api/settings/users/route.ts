@@ -13,7 +13,6 @@ const Body = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(120),
   role: z.enum(["admin", "client"]),
-  receivesDailyReport: z.boolean(),
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 

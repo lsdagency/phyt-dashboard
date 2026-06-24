@@ -6,7 +6,6 @@ import { listUsers, updateUser, deleteUser, countAdmins } from "@/lib/repo";
 const Patch = z.object({
   name: z.string().min(1).max(120).optional(),
   role: z.enum(["admin", "client"]).optional(),
-  receivesDailyReport: z.boolean().optional(),
   password: z.string().min(8).optional(),
 });
 

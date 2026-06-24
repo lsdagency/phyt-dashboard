@@ -68,17 +68,6 @@ export const CREDENTIAL_GROUPS: CredGroup[] = [
       { key: "ANTHROPIC_MODEL", label: "Model (optional)", secret: false, placeholder: "claude-sonnet-4-6" },
     ],
   },
-  {
-    provider: "resend",
-    title: "Email (Resend)",
-    hint: "Verify a sending domain, then create an API key. Send from an address on the verified domain.",
-    docUrl: "https://resend.com/docs/dashboard/api-keys/introduction",
-    docLabel: "Resend API keys & domain setup",
-    fields: [
-      { key: "RESEND_API_KEY", label: "API key", secret: true },
-      { key: "RESEND_FROM_EMAIL", label: "From address", secret: false, placeholder: "reports@phytapp.com" },
-    ],
-  },
 ];
 
 // Fields that are optional and shouldn't block a "Connected" status.

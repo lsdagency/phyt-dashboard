@@ -7,7 +7,6 @@ interface User {
   email: string;
   name: string;
   role: "admin" | "client";
-  receivesDailyReport: boolean;
 }
 
 export default function UserManager({ initialUsers }: { initialUsers: User[] }) {
@@ -16,7 +15,6 @@ export default function UserManager({ initialUsers }: { initialUsers: User[] }) 
     email: "",
     name: "",
     role: "client" as "admin" | "client",
-    receivesDailyReport: true,
     password: "",
   });
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +33,7 @@ export default function UserManager({ initialUsers }: { initialUsers: User[] }) 
       const data = await res.json();
       if (!res.ok) return setError(data.error || "Could not add user");
       setUsers(data.users);
-      setForm({ email: "", name: "", role: "client", receivesDailyReport: true, password: "" });
+      setForm({ email: "", name: "", role: "client", password: "" });
     } finally {
       setBusy(false);
     }
@@ -67,7 +65,6 @@ export default function UserManager({ initialUsers }: { initialUsers: User[] }) 
             <th className="px-4 py-3">Name</th>
             <th className="px-4 py-3">Email</th>
             <th className="px-4 py-3">Role</th>
-            <th className="px-4 py-3">Daily email</th>
             <th className="px-4 py-3"></th>
           </tr>
         </thead>
@@ -84,20 +81,6 @@ export default function UserManager({ initialUsers }: { initialUsers: User[] }) 
                 >
                   {u.role === "admin" ? "Media buyer" : "Client"}
                 </span>
-              </td>
-              <td className="px-4 py-3">
-                <button
-                  onClick={() =>
-                    patch(u.id, { receivesDailyReport: !u.receivesDailyReport })
-                  }
-                  className={`rounded-full px-2.5 py-0.5 text-xs ${
-                    u.receivesDailyReport
-                      ? "bg-phyt-green-soft"
-                      : "bg-phyt-ink/5 text-phyt-ink/50"
-                  }`}
-                >
-                  {u.receivesDailyReport ? "On" : "Off"}
-                </button>
               </td>
               <td className="px-4 py-3 text-right">
                 <button
@@ -156,16 +139,6 @@ export default function UserManager({ initialUsers }: { initialUsers: User[] }) 
             <option value="admin">Media buyer</option>
           </select>
         </div>
-        <label className="flex items-center gap-2 pb-2 text-sm">
-          <input
-            type="checkbox"
-            checked={form.receivesDailyReport}
-            onChange={(e) =>
-              setForm({ ...form, receivesDailyReport: e.target.checked })
-            }
-          />
-          Daily email
-        </label>
         <button
           type="submit"
           disabled={busy}

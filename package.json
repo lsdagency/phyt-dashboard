@@ -23,12 +23,10 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "recharts": "^3.2.1",
-    "resend": "^6.1.2",
     "swr": "^2.3.6",
     "zod": "^4.1.11"
   },
   "devDependencies": {
-    "@netlify/functions": "^4.2.6",
     "@tailwindcss/postcss": "^4.1.13",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.18.6",

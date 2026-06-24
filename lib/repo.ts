@@ -10,7 +10,6 @@ export interface UserRecord {
   email: string;
   name: string;
   role: Role;
-  receivesDailyReport: boolean;
 }
 export interface KpiRecord {
   id: number;
@@ -42,14 +41,12 @@ function defaultUserSeeds() {
       email: adminEmail,
       name: "Media Buyer",
       role: "admin" as Role,
-      receivesDailyReport: false,
       passwordHash: bcrypt.hashSync(adminPass, 10),
     },
     {
       email: clientEmail,
       name: process.env.CLIENT_NAME || "PHYT",
       role: "client" as Role,
-      receivesDailyReport: true,
       passwordHash: bcrypt.hashSync(clientPass, 10),
     },
   ];
@@ -123,7 +120,6 @@ export async function createUser(input: {
   email: string;
   name: string;
   role: Role;
-  receivesDailyReport: boolean;
   password: string;
 }): Promise<UserRecord> {
   await ensureBootstrap();
@@ -133,27 +129,26 @@ export async function createUser(input: {
   if (dbAvailable && db) {
     const [row] = await db
       .insert(schema.users)
-      .values({ email, name: input.name, role: input.role, receivesDailyReport: input.receivesDailyReport, passwordHash })
+      .values({ email, name: input.name, role: input.role, passwordHash })
       .returning();
     return toUser(row);
   }
   if (mem.users.some((u) => u.email === email)) {
     throw new Error("A user with that email already exists.");
   }
-  const rec = { id: mem.seq++, email, name: input.name, role: input.role, receivesDailyReport: input.receivesDailyReport, passwordHash };
+  const rec = { id: mem.seq++, email, name: input.name, role: input.role, passwordHash };
   mem.users.push(rec);
   return stripHash(rec);
 }
 
 export async function updateUser(
   id: number,
-  patch: { name?: string; role?: Role; receivesDailyReport?: boolean; password?: string },
+  patch: { name?: string; role?: Role; password?: string },
 ): Promise<void> {
   await ensureBootstrap();
   const set: Record<string, unknown> = {};
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.role !== undefined) set.role = patch.role;
-  if (patch.receivesDailyReport !== undefined) set.receivesDailyReport = patch.receivesDailyReport;
   if (patch.password) set.passwordHash = bcrypt.hashSync(patch.password, 10);
 
   if (dbAvailable && db) {
@@ -164,7 +159,6 @@ export async function updateUser(
   if (!row) return;
   if (set.name !== undefined) row.name = set.name as string;
   if (set.role !== undefined) row.role = set.role as Role;
-  if (set.receivesDailyReport !== undefined) row.receivesDailyReport = set.receivesDailyReport as boolean;
   if (set.passwordHash !== undefined) row.passwordHash = set.passwordHash as string;
 }
 
@@ -180,12 +174,6 @@ export async function deleteUser(id: number): Promise<void> {
 export async function countAdmins(): Promise<number> {
   const all = await listUsers();
   return all.filter((u) => u.role === "admin").length;
-}
-
-/** Client recipients of the daily report. */
-export async function reportRecipients(): Promise<UserRecord[]> {
-  const all = await listUsers();
-  return all.filter((u) => u.receivesDailyReport);
 }
 
 // ---------- KPIs ----------
@@ -237,7 +225,6 @@ function toUser(row: typeof schema.users.$inferSelect): UserRecord {
     email: row.email,
     name: row.name,
     role: row.role as Role,
-    receivesDailyReport: row.receivesDailyReport,
   };
 }
 function stripHash(row: UserRecord & { passwordHash: string }): UserRecord {

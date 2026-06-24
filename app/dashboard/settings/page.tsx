@@ -1,13 +1,12 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { listKpis, listUsers, reportRecipients } from "@/lib/repo";
+import { listKpis, listUsers } from "@/lib/repo";
 import { CREDENTIAL_GROUPS, credentialStatus } from "@/lib/credentials";
 import { dbAvailable } from "@/lib/db";
 import AppHeader from "@/components/AppHeader";
 import KpiManager from "./KpiManager";
 import UserManager from "./UserManager";
 import CredentialsManager from "./CredentialsManager";
-import EmailManager from "./EmailManager";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +15,10 @@ export default async function SettingsPage() {
   if (!session) redirect("/login");
   if (session.role !== "admin") redirect("/dashboard");
 
-  const [kpis, users, credStatus, recipients] = await Promise.all([
+  const [kpis, users, credStatus] = await Promise.all([
     listKpis(),
     listUsers(),
     credentialStatus(),
-    reportRecipients(),
   ]);
 
   return (
@@ -30,13 +28,13 @@ export default async function SettingsPage() {
       <main className="mx-auto max-w-5xl px-6 py-10">
         <h1 className="text-4xl">Settings</h1>
         <p className="mt-2 text-phyt-ink/70">
-          Connect data sources, manage KPI targets, dashboard access, and daily-report recipients.
+          Connect data sources, manage KPI targets, and dashboard access.
         </p>
 
         <section className="mt-10">
           <h2 className="text-2xl">Integrations &amp; API keys</h2>
           <p className="mt-1 text-sm text-phyt-ink/60">
-            Connect Apple Search Ads, RevenueCat, PostHog, Claude and Resend. Encrypted at rest.
+            Connect Apple Search Ads, RevenueCat, PostHog and Claude. Encrypted at rest.
           </p>
           <div className="mt-4">
             <CredentialsManager groups={CREDENTIAL_GROUPS} initialStatus={credStatus} />
@@ -61,22 +59,13 @@ export default async function SettingsPage() {
         </section>
 
         <section className="mt-12">
-          <h2 className="text-2xl">Users &amp; report recipients</h2>
+          <h2 className="text-2xl">Users</h2>
           <p className="mt-1 text-sm text-phyt-ink/60">
-            Clients log in and (if enabled) receive the daily email. One list for both.
+            Who can log in to the dashboard. Admins (media buyers) get full
+            access; clients are view-only.
           </p>
           <div className="mt-4">
             <UserManager initialUsers={users} />
-          </div>
-        </section>
-
-        <section className="mt-12">
-          <h2 className="text-2xl">Daily email</h2>
-          <p className="mt-1 text-sm text-phyt-ink/60">
-            The automated morning report — preview it with a test send.
-          </p>
-          <div className="mt-4">
-            <EmailManager recipients={recipients} />
           </div>
         </section>
       </main>

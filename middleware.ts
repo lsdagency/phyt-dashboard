@@ -3,8 +3,8 @@ import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 import { SESSION_COOKIE } from "@/lib/constants";
 
-// Routes reachable without a session. /api/cron is protected by CRON_SECRET instead.
-const PUBLIC_PREFIXES = ["/login", "/api/auth", "/api/cron"];
+// Routes reachable without a session.
+const PUBLIC_PREFIXES = ["/login", "/api/auth"];
 
 function secret() {
   return new TextEncoder().encode(

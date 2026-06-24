@@ -14,8 +14,7 @@ import {
 
 /**
  * Dashboard accounts. role "admin" = media buyer (full access + settings).
- * role "client" = PHYT (view-only). A client with receivesDailyReport=true
- * also gets the daily email — so login access and email recipients are one list.
+ * role "client" = PHYT (view-only).
  */
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -23,6 +22,8 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   name: varchar("name", { length: 120 }).notNull().default(""),
   role: varchar("role", { length: 16 }).notNull().default("client"), // admin | client
+  // Legacy: retained so the column on the live DB stays mapped. No longer used
+  // (the daily-email feature was removed); safe to drop in a future migration.
   receivesDailyReport: boolean("receives_daily_report").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
