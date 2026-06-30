@@ -94,8 +94,8 @@ export default function KeywordTable({ data }: { data: DashboardData }) {
       <PaginationControls {...pager} />
       <p className="mt-1 text-xs text-phyt-ink/50">
         Proposed bids are calculated by the rules engine from each keyword&apos;s
-        cost-per-sub vs LTV (where it has subs) and CPI vs target. Hover a proposed
-        bid to see the reasoning.
+        cost-per-sub vs LTV (once it has 5+ subs) and CPI vs target otherwise.
+        Hover a proposed bid to see the reasoning.
       </p>
     </div>
   );

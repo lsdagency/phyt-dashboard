@@ -15,13 +15,14 @@ function targetCpi(data: DashboardData): number {
 }
 
 const MAX_BIDS = 5; // surface the 5 highest-impact bid changes
+const MIN_SUBS_FOR_LTV = 5; // need this many subs before trusting cost-per-sub vs LTV
 
 /**
  * Decide a bid move for one keyword from its economics: cost-per-sub vs LTV
- * first (the profit signal), then install efficiency (CPI vs target) when there
- * are no subs yet. Returns a direction + multiplier + plain-English rationale.
- * Always returns a call for a keyword with real spend — no "hold" — so the
- * panel always has concrete actions to show.
+ * first (the profit signal), but only once there are enough subs to trust it
+ * (>= MIN_SUBS_FOR_LTV); otherwise install efficiency (CPI vs target). Returns
+ * a direction + multiplier + plain-English rationale. Always returns a call for
+ * a keyword with real spend — no "hold" — so the panel always has actions.
  */
 function bidDecision(
   k: DashboardData["asa"]["keywords"][number],
@@ -30,8 +31,8 @@ function bidDecision(
 ): { action: "increase" | "decrease"; factor: number; rationale: string } | null {
   if (k.spend <= 0 && k.taps <= 0) return null;
 
-  // 1. Subscription economics — strongest signal when we have conversions.
-  if (k.subscriptions >= 1 && k.costPerSub > 0) {
+  // 1. Subscription economics — only once we have enough subs to be meaningful.
+  if (k.subscriptions >= MIN_SUBS_FOR_LTV && k.costPerSub > 0) {
     const ltvCac = ltv / k.costPerSub;
     if (k.costPerSub <= ltv * 0.7)
       return { action: "increase", factor: 1.2, rationale: `LTV:CAC ${ltvCac.toFixed(1)}:1 — £${k.costPerSub.toFixed(0)}/sub well under £${ltv.toFixed(0)} LTV. Scale up.` };
