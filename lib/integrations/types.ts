@@ -62,9 +62,10 @@ export interface AsaKeyword {
   subscriptions: number;
   costPerTrial: number;
   costPerSub: number;
-  // Populated by Claude's optimisation pass (Step 5); null until then.
+  // Proposed bid from the rules engine (applyBidLogic), set for every keyword.
   proposedBid: number | null;
   bidAction: BidAction | null;
+  bidRationale?: string; // plain-English why, shown on hover in the keyword table
 }
 
 export interface AsaSearchTerm {

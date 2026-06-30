@@ -302,12 +302,25 @@ export async function generateOptimisation(
   }
 }
 
-/** Map an optimisation's bid changes onto the keyword rows (sets proposedBid + bidAction). */
-export function applyOptimisation(data: DashboardData, opt: Optimisation) {
-  const byId = new Map(opt.bidRecommendations.map((b) => [b.keywordId, b]));
+/**
+ * Run the bid rules over EVERY keyword and write proposedBid + bidAction +
+ * bidRationale onto each row. Keywords with no signal (no spend, no taps) get
+ * a null proposed bid. This is what powers the keyword table's proposed-bid
+ * column for all keywords, not just the top few.
+ */
+export function applyBidLogic(data: DashboardData) {
+  const ltv = data.ltv.blendedLtv;
+  const tCpi = targetCpi(data);
   for (const k of data.asa.keywords) {
-    const rec = byId.get(k.keywordId);
-    k.proposedBid = rec ? rec.proposedBid : null;
-    k.bidAction = rec ? rec.action : null;
+    const d = bidDecision(k, ltv, tCpi);
+    if (!d) {
+      k.proposedBid = null;
+      k.bidAction = null;
+      k.bidRationale = undefined;
+      continue;
+    }
+    k.proposedBid = Math.max(MIN_BID, round(k.bid * d.factor));
+    k.bidAction = d.action;
+    k.bidRationale = d.rationale;
   }
 }

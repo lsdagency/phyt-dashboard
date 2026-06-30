@@ -7,7 +7,7 @@ import { getAsaData } from "./asa";
 import { getRevenueCatData } from "./revenuecat";
 import { getPostHogData } from "./posthog";
 import { deriveRevenue } from "./derive";
-import { heuristicOptimisation, applyOptimisation } from "../optimise";
+import { heuristicOptimisation, applyBidLogic } from "../optimise";
 
 export * from "./types";
 
@@ -154,9 +154,10 @@ export async function getDashboardData(
   };
 
   // Rules-based optimisation — deterministic, instant, no API key needed.
-  const optimisation = heuristicOptimisation(data);
-  applyOptimisation(data, optimisation);
-  data.optimisation = optimisation;
+  // applyBidLogic sets a proposed bid on every keyword; the optimisation object
+  // carries the search-term (structural) opportunities + summary.
+  data.optimisation = heuristicOptimisation(data);
+  applyBidLogic(data);
 
   return data;
 }
