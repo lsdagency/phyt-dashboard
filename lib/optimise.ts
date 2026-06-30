@@ -79,22 +79,32 @@ export function heuristicOptimisation(data: DashboardData): Optimisation {
     if (bidRecommendations.length >= MAX_BIDS) break;
   }
 
-  // Campaigns to review: below break-even, spending with no subs, or CPI well
-  // over target. Ranked by spend so the costliest problems surface first.
+  // Campaigns to review: flagged on install efficiency (CPI vs target), not subs
+  // or LTV — volumes are still too low to model conversions reliably. Worst CPI
+  // first; campaigns spending with no installs at all surface ahead of those.
   const pauseRecommendations: PauseRecommendation[] = [...data.asa.campaigns]
-    .filter((c) => c.status === "ENABLED" && c.spend > 0)
-    .sort((a, b) => b.spend - a.spend)
-    .map((c): PauseRecommendation | null => {
-      if (c.subscriptions >= 1 && c.ltvCac > 0 && c.ltvCac < 1)
-        return { campaignId: c.id, campaignName: c.name, rationale: `LTV:CAC ${c.ltvCac.toFixed(2)}:1 on £${c.spend.toFixed(0)} spend — below break-even.` };
-      if (c.subscriptions === 0 && c.spend > tCpi * 3)
-        return { campaignId: c.id, campaignName: c.name, rationale: `£${c.spend.toFixed(0)} spent, 0 subs — review targeting/bids.` };
-      if (c.cpa > tCpi * 1.5)
-        return { campaignId: c.id, campaignName: c.name, rationale: `CPI £${c.cpa.toFixed(2)} well above £${tCpi} target.` };
-      return null;
+    .filter(
+      (c) =>
+        c.status === "ENABLED" &&
+        c.spend > 0 &&
+        (c.cpa > tCpi || (c.installs === 0 && c.spend > tCpi)),
+    )
+    .sort((a, b) => {
+      const aZero = a.installs === 0;
+      const bZero = b.installs === 0;
+      if (aZero !== bZero) return aZero ? -1 : 1; // no-install campaigns first
+      if (aZero && bZero) return b.spend - a.spend;
+      return b.cpa - a.cpa; // then worst CPI first
     })
-    .filter((r): r is PauseRecommendation => r !== null)
-    .slice(0, 4);
+    .slice(0, 4)
+    .map((c) => ({
+      campaignId: c.id,
+      campaignName: c.name,
+      rationale:
+        c.installs === 0
+          ? `£${c.spend.toFixed(0)} spent, 0 installs — no CPI to show for it, review.`
+          : `CPI £${c.cpa.toFixed(2)} vs £${tCpi} target on £${c.spend.toFixed(0)} spend — reduce bids/review.`,
+    }));
 
   // Search-term harvesting + negatives.
   const exactKeywords = new Set(
@@ -132,7 +142,7 @@ export function heuristicOptimisation(data: DashboardData): Optimisation {
 
   const summary =
     `${ups} bid increase${ups === 1 ? "" : "s"} and ${downs} decrease${downs === 1 ? "" : "s"} recommended, ` +
-    `${pauseRecommendations.length} campaign${pauseRecommendations.length === 1 ? "" : "s"} below break-even, ` +
+    `${pauseRecommendations.length} campaign${pauseRecommendations.length === 1 ? "" : "s"} to review, ` +
     `and ${structuralRecommendations.length} structural opportunit${structuralRecommendations.length === 1 ? "y" : "ies"}. ` +
     `Blended LTV:CAC is ${blendedCac.toFixed(2)}:1 on £${data.asa.totals.spend.toFixed(0)} spend.`;
 
