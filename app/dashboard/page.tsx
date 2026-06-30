@@ -19,7 +19,7 @@ export default async function DashboardPage() {
             Live performance · revenue · product analytics
           </p>
         </div>
-        <DashboardClient isAdmin={session.role === "admin"} />
+        <DashboardClient />
       </main>
     </div>
   );

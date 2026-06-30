@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { rangeForPreset, type PresetId } from "@/lib/dateRanges";
-import type { DashboardData, Optimisation } from "@/lib/integrations/types";
+import type { DashboardData } from "@/lib/integrations/types";
 import DateRangePicker from "@/components/dashboard/DateRangePicker";
 import KpiCards from "@/components/dashboard/KpiCards";
 import CampaignTable from "@/components/dashboard/CampaignTable";
@@ -24,7 +24,7 @@ const TABS = [
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
-export default function DashboardClient({ isAdmin }: { isAdmin: boolean }) {
+export default function DashboardClient() {
   // Tab from the URL hash so refresh/share keeps the view (#campaigns etc.).
   const [tab, setTab] = useState<TabId>("overview");
   useEffect(() => {
@@ -39,9 +39,6 @@ export default function DashboardClient({ isAdmin }: { isAdmin: boolean }) {
   const [preset, setPreset] = useState<PresetId>("last_7");
   const [custom, setCustom] = useState(() => rangeForPreset("last_7"));
   const [refreshing, setRefreshing] = useState(false);
-  // Claude regeneration overrides the baseline heuristic until the range changes.
-  const [claudeOpt, setClaudeOpt] = useState<Optimisation | null>(null);
-  const [regenerating, setRegenerating] = useState(false);
 
   const range = useMemo(
     () => (preset === "custom" ? custom : rangeForPreset(preset)),
@@ -54,45 +51,17 @@ export default function DashboardClient({ isAdmin }: { isAdmin: boolean }) {
     keepPreviousData: true,
   });
 
-  // Reset any Claude override when the date range changes.
-  useEffect(() => {
-    setClaudeOpt(null);
-  }, [url]);
-
   async function refresh() {
     setRefreshing(true);
     try {
       const fresh = await fetcher(url + "&refresh=1");
       await mutate(fresh, { revalidate: false });
-      setClaudeOpt(null);
     } finally {
       setRefreshing(false);
     }
   }
 
-  async function regenerate() {
-    setRegenerating(true);
-    try {
-      const res = await fetch(
-        `/api/optimise?start=${range.start}&end=${range.end}`,
-        { method: "POST" },
-      );
-      const json = await res.json();
-      if (res.ok && json.optimisation) setClaudeOpt(json.optimisation as Optimisation);
-    } finally {
-      setRegenerating(false);
-    }
-  }
-
-  const optimisation = claudeOpt ?? data?.optimisation;
-  const bidOverride = claudeOpt
-    ? Object.fromEntries(
-        claudeOpt.bidRecommendations.map((b) => [
-          b.keywordId,
-          { proposedBid: b.proposedBid, action: b.action },
-        ]),
-      )
-    : undefined;
+  const optimisation = data?.optimisation;
 
   const sources = data
     ? [data.asa.source, data.revenueCat.source, data.posthog.source]
@@ -178,15 +147,7 @@ export default function DashboardClient({ isAdmin }: { isAdmin: boolean }) {
                 <Charts data={data} />
               </Section>
 
-              {optimisation && (
-                <Recommendations
-                  optimisation={optimisation}
-                  currency={data.currency}
-                  canRegenerate={isAdmin}
-                  regenerating={regenerating}
-                  onRegenerate={regenerate}
-                />
-              )}
+              {optimisation && <Recommendations optimisation={optimisation} />}
             </>
           )}
 
@@ -205,8 +166,8 @@ export default function DashboardClient({ isAdmin }: { isAdmin: boolean }) {
           )}
 
           {tab === "keywords" && (
-            <Section title="Keyword breakdown" subtitle="Bids, performance & Claude's proposed changes">
-              <KeywordTable data={data} bidOverride={bidOverride} />
+            <Section title="Keyword breakdown" subtitle="Bids, performance & a proposed bid for every keyword">
+              <KeywordTable data={data} />
             </Section>
           )}
 
