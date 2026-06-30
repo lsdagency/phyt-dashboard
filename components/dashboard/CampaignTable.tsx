@@ -1,9 +1,22 @@
 import type { DashboardData } from "@/lib/integrations/types";
 import { money, num, pct, ratio } from "@/lib/format";
 
+/**
+ * Colour a campaign's CPI against the target: green at/under target, amber up to
+ * 30% over, red beyond that (or spending with no installs at all). This is the
+ * "where to focus" signal — CPI is reliable at low volume, LTV:CAC isn't.
+ */
+function cpiTint(cpa: number, installs: number, target: number): string {
+  if (installs === 0) return "bg-phyt-pink-soft";
+  if (cpa <= target) return "bg-phyt-green-soft";
+  if (cpa <= target * 1.3) return "bg-phyt-yellow-soft";
+  return "bg-phyt-pink-soft";
+}
+
 export default function CampaignTable({ data }: { data: DashboardData }) {
-  const { asa, ltv, currency } = data;
+  const { asa, ltv, currency, kpis } = data;
   const c = currency;
+  const tCpi = kpis.find((k) => k.metric === "cpa")?.target ?? 12;
 
   // Sort by installs first, then spend (both descending).
   const campaigns = [...asa.campaigns].sort(
@@ -20,6 +33,7 @@ export default function CampaignTable({ data }: { data: DashboardData }) {
   const totalCostPerSub = tSubs ? tSpend / tSubs : 0;
 
   return (
+    <div>
     <div className="overflow-x-auto rounded-2xl border border-phyt-ink/10">
       <table className="w-full min-w-[1100px] text-sm">
         <thead>
@@ -58,22 +72,22 @@ export default function CampaignTable({ data }: { data: DashboardData }) {
               <Td>{num(x.installs)}</Td>
               <Td>{money(x.cpt, c)}</Td>
               <Td>{pct(x.ttr)}</Td>
-              <Td>{money(x.cpa, c)}</Td>
+              <td className="px-3 py-2.5 text-right tabular-nums">
+                <span
+                  title={`Target CPI ${money(tCpi, c)}`}
+                  className={`rounded-full px-2 py-0.5 text-xs ${cpiTint(x.cpa, x.installs, tCpi)}`}
+                >
+                  {money(x.cpa, c)}
+                </span>
+              </td>
               <Td>{pct(x.conversionRate)}</Td>
               <Td>{num(x.trials)}</Td>
               <Td>{money(x.costPerTrial, c)}</Td>
               <Td>{num(x.subscriptions)}</Td>
               <Td>{money(x.costPerSub, c)}</Td>
               <Td>{money(ltv.blendedLtv, c)}</Td>
-              <td className="px-3 py-2.5 text-right tabular-nums">
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs ${
-                    x.ltvCac >= 1 ? "bg-phyt-green-soft" : "bg-phyt-pink-soft"
-                  }`}
-                >
-                  {ratio(x.ltvCac)}
-                </span>
-              </td>
+              {/* LTV:CAC shown but not colour-flagged — too noisy at low volume. */}
+              <Td>{x.subscriptions > 0 ? ratio(x.ltvCac) : "—"}</Td>
             </tr>
           ))}
 
@@ -97,6 +111,19 @@ export default function CampaignTable({ data }: { data: DashboardData }) {
           </tr>
         </tbody>
       </table>
+    </div>
+    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-phyt-ink/55">
+      <span>CPI vs {money(tCpi, c)} target:</span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="h-2.5 w-2.5 rounded-full bg-phyt-green-soft" /> at / under
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="h-2.5 w-2.5 rounded-full bg-phyt-yellow-soft" /> up to 30% over
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="h-2.5 w-2.5 rounded-full bg-phyt-pink-soft" /> well over / no installs
+      </span>
+    </div>
     </div>
   );
 }
