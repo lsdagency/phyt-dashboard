@@ -12,6 +12,7 @@ import KeywordTable from "@/components/dashboard/KeywordTable";
 import SearchTermTable from "@/components/dashboard/SearchTermTable";
 import Recommendations from "@/components/dashboard/Recommendations";
 import BudgetPlanner from "@/components/dashboard/BudgetPlanner";
+import CompetitorOverview from "@/components/dashboard/CompetitorOverview";
 
 const fetcher = (u: string) => fetch(u).then((r) => r.json());
 
@@ -21,10 +22,11 @@ const TABS = [
   { id: "budget", label: "Budget planner" },
   { id: "keywords", label: "Keywords" },
   { id: "searchterms", label: "Search terms" },
+  { id: "competitors", label: "Competitors" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
-export default function DashboardClient() {
+export default function DashboardClient({ isAdmin }: { isAdmin: boolean }) {
   // Tab from the URL hash so refresh/share keeps the view (#campaigns etc.).
   const [tab, setTab] = useState<TabId>("overview");
   useEffect(() => {
@@ -174,6 +176,15 @@ export default function DashboardClient() {
           {tab === "searchterms" && (
             <Section title="Search-term report" subtitle="What users actually searched">
               <SearchTermTable data={data} />
+            </Section>
+          )}
+
+          {tab === "competitors" && (
+            <Section
+              title="Competitor & market overview"
+              subtitle="Public App Store intelligence on rival apps, analysed for PHYT"
+            >
+              <CompetitorOverview isAdmin={isAdmin} />
             </Section>
           )}
         </>
