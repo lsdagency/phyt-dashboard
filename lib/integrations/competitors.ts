@@ -257,9 +257,12 @@ async function marketSnapshot(
 
 /** Build the full competitor report: fetch all apps + Claude analysis + snapshot. */
 export async function buildCompetitorReport(env: Env): Promise<CompetitorReport> {
-  const apiKey = env.ANTHROPIC_API_KEY;
+  const apiKey = env.ANTHROPIC_API_KEY?.trim();
   const model = env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
   const client = apiKey ? new Anthropic({ apiKey }) : null;
+  // Non-secret fingerprint of the key the server actually resolved — surfaced in
+  // the error so we can see whether it sent the real sk-ant- key or something else.
+  const keyHint = apiKey ? `${apiKey.slice(0, 7)}…(${apiKey.length} chars)` : "MISSING";
 
   // Fetch every app's public data in parallel.
   const apps = await Promise.all(
@@ -281,7 +284,8 @@ export async function buildCompetitorReport(env: Env): Promise<CompetitorReport>
       try {
         return await analyseCompetitor(seed, app, client, model);
       } catch (e) {
-        if (!aiError) aiError = e instanceof Error ? e.message : "Claude analysis failed";
+        if (!aiError)
+          aiError = `${e instanceof Error ? e.message : "Claude analysis failed"} [key ${keyHint}, model ${model}]`;
         return null;
       }
     }),
@@ -302,7 +306,8 @@ export async function buildCompetitorReport(env: Env): Promise<CompetitorReport>
       snapshot = s.snapshot;
       actions = s.actions;
     } catch (e) {
-      if (!aiError) aiError = e instanceof Error ? e.message : "Claude snapshot failed";
+      if (!aiError)
+        aiError = `${e instanceof Error ? e.message : "Claude snapshot failed"} [key ${keyHint}, model ${model}]`;
     }
   }
 
