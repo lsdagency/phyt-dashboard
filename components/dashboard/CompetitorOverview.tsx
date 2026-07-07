@@ -21,6 +21,12 @@ const PRIORITY_LABEL: Record<CompetitorPriority, string> = {
   watch: "Watch",
 };
 
+/** Deep link to search a competitor in Meta's Ad Library (GB storefront). */
+function metaAdLibraryUrl(name: string): string {
+  const q = name.replace(/\(.*?\)/g, "").trim();
+  return `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=GB&media_type=all&search_type=keyword_unordered&q=${encodeURIComponent(q)}`;
+}
+
 function Chips({ items, tint }: { items: string[]; tint: string }) {
   if (!items?.length) return null;
   return (
@@ -68,7 +74,10 @@ function CompetitorCard({ c }: { c: CompetitorEntry }) {
 
       {a ? (
         <div className="mt-3 space-y-3 text-sm">
-          <p className="text-phyt-ink/80">{a.positioning}</p>
+          {a.summary && (
+            <p className="font-medium text-phyt-ink">{a.summary}</p>
+          )}
+          <p className="text-phyt-ink/70">{a.positioning}</p>
           {a.messagingFlags?.length > 0 && (
             <Chips items={a.messagingFlags} tint="bg-phyt-blue-soft" />
           )}
@@ -107,16 +116,21 @@ function CompetitorCard({ c }: { c: CompetitorEntry }) {
         </p>
       )}
 
-      {c.app?.url && (
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+        {c.app?.url && (
+          <a href={c.app.url} target="_blank" rel="noreferrer" className="text-phyt-blue underline">
+            App Store ↗
+          </a>
+        )}
         <a
-          href={c.app.url}
+          href={metaAdLibraryUrl(c.name)}
           target="_blank"
           rel="noreferrer"
-          className="mt-3 inline-block text-xs text-phyt-blue underline"
+          className="text-phyt-blue underline"
         >
-          View on App Store ↗
+          Meta Ad Library ↗
         </a>
-      )}
+      </div>
     </div>
   );
 }
@@ -170,6 +184,11 @@ export default function CompetitorOverview({ isAdmin }: { isAdmin: boolean }) {
           {!data.aiEnabled && (
             <p className="mt-1 text-xs text-phyt-ink/45">
               Showing listings only — add an Anthropic key in Settings for the AI analysis.
+            </p>
+          )}
+          {data.aiEnabled && data.aiError && (
+            <p className="mt-1 rounded-lg bg-phyt-pink-soft px-3 py-1.5 text-xs text-phyt-ink">
+              AI analysis failed: {data.aiError}. Check the Claude key/model in Settings, then Refresh.
             </p>
           )}
         </div>

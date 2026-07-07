@@ -50,6 +50,7 @@ export interface CompetitorAppData {
 }
 
 export interface CompetitorAnalysis {
+  summary: string;
   inferredKeywords: string[];
   positioning: string;
   messagingFlags: string[];
@@ -72,6 +73,7 @@ export interface CompetitorAction {
 export interface CompetitorReport {
   generatedAt: string;
   aiEnabled: boolean;
+  aiError?: string; // set when a Claude key is present but the calls failed
   snapshot: string;
   actions: CompetitorAction[];
   competitors: CompetitorEntry[];
@@ -84,7 +86,9 @@ const PHYT_CONTEXT = `PHYT is a UK computer-vision body-composition scanning app
 export const COMPETITOR_SEED: CompetitorSeed[] = [
   { key: "spren", name: "Spren", appId: 1664503999, country: "gb", group: "Direct AI / CV scan", priority: "high", whyTrack: "Best-funded direct rival. DEXA-validated. Known scan-quality issues — acquisition opportunity." },
   { key: "methreesixty", name: "MeThreeSixty", appId: 1472541261, country: "gb", group: "Direct AI / CV scan", priority: "high", whyTrack: "Top-rated by volume. Confirmed running ASA on 'body composition tracker'." },
+  { key: "zing", name: "Zing AI", appId: 1552207792, country: "gb", group: "Direct AI / CV scan", priority: "high", whyTrack: "Major AI fitness coach with body-composition scanning. Big direct rival on AI body-scan terms." },
   { key: "skor", name: "SKŌR", appId: 6760481469, country: "gb", group: "Direct AI / CV scan", priority: "high", whyTrack: "GLP-1 visual-transformation angle. Keyword overlap on body-transformation terms." },
+  { key: "bodymapp", name: "Bodymapp", appId: 1081678481, country: "gb", group: "Direct AI / CV scan", priority: "medium", whyTrack: "At-home body scans, posture + body comp. Watch for GLP-1 platform acquisition." },
   { key: "withings", name: "Withings (Health Mate)", appId: 542701020, country: "gb", group: "Home BIA / smart scale", priority: "high", whyTrack: "Premium, health-engaged users. BIA inconsistency vs PHYT 3.1% MAE = messaging gap." },
   { key: "eufy", name: "eufy Life", appId: 1153481724, country: "gb", group: "Home BIA / smart scale", priority: "high", whyTrack: "PHYT's direct benchmark (MAE 6.2%). Mine reviews for BIA frustration → CPP copy." },
   { key: "myfitnesspal", name: "MyFitnessPal", appId: 341232718, country: "gb", group: "GLP-1 / weight-loss adjacent", priority: "high", whyTrack: "Dominates weight-loss terms. No body comp. Biggest messaging gap for PHYT to exploit." },
@@ -153,6 +157,7 @@ const ANALYSIS_TOOL: Anthropic.Tool = {
   input_schema: {
     type: "object",
     properties: {
+      summary: { type: "string", description: "A single punchy sentence TL;DR of this competitor for a busy media buyer — who they are, their angle, and the headline threat/opportunity for PHYT." },
       inferredKeywords: { type: "array", items: { type: "string" }, description: "6-12 App Store search terms this app is clearly optimising for, inferred from its name/description." },
       positioning: { type: "string", description: "1-2 sentences on how the app positions itself." },
       messagingFlags: { type: "array", items: { type: "string" }, description: "Notable angles present, e.g. 'GLP-1 language', 'clinical/DEXA', 'body-composition claims', 'BIA smart-scale'. Empty if none." },
@@ -160,7 +165,7 @@ const ANALYSIS_TOOL: Anthropic.Tool = {
       releaseWatch: { type: "string", description: "Any notable recent feature/roadmap signal from the release notes to watch (esp. body-composition or scanning features), else '—'." },
       vsPhyt: { type: "string", description: "The gap or opportunity for PHYT vs this competitor, 1-2 sentences." },
     },
-    required: ["inferredKeywords", "positioning", "messagingFlags", "reviewThemes", "releaseWatch", "vsPhyt"],
+    required: ["summary", "inferredKeywords", "positioning", "messagingFlags", "reviewThemes", "releaseWatch", "vsPhyt"],
   },
 };
 
@@ -169,7 +174,7 @@ async function analyseCompetitor(
   app: CompetitorAppData,
   client: Anthropic,
   model: string,
-): Promise<CompetitorAnalysis | null> {
+): Promise<CompetitorAnalysis> {
   const reviewText = app.reviews
     .slice(0, 12)
     .map((r) => `★${r.rating} ${r.title}: ${r.body}`)
@@ -189,20 +194,16 @@ RECENT REVIEWS:
 ${reviewText || "(no reviews available)"}
 
 Analyse this competitor from an Apple Search Ads / ASO angle for PHYT and submit via the tool.`;
-  try {
-    const resp = await client.messages.create({
-      model,
-      max_tokens: 1200,
-      tools: [ANALYSIS_TOOL],
-      tool_choice: { type: "tool", name: "submit_competitor_analysis" },
-      messages: [{ role: "user", content: prompt }],
-    });
-    const block = resp.content.find((b) => b.type === "tool_use");
-    if (!block || block.type !== "tool_use") return null;
-    return block.input as CompetitorAnalysis;
-  } catch {
-    return null;
-  }
+  const resp = await client.messages.create({
+    model,
+    max_tokens: 1200,
+    tools: [ANALYSIS_TOOL],
+    tool_choice: { type: "tool", name: "submit_competitor_analysis" },
+    messages: [{ role: "user", content: prompt }],
+  });
+  const block = resp.content.find((b) => b.type === "tool_use");
+  if (!block || block.type !== "tool_use") throw new Error("no tool_use block in Claude response");
+  return block.input as CompetitorAnalysis;
 }
 
 const SNAPSHOT_TOOL: Anthropic.Tool = {
@@ -241,21 +242,17 @@ async function marketSnapshot(
       return `${e.name} (${e.group}, ${e.priority}) — ${a?.positioning ?? e.app!.description.slice(0, 160)}. Flags: ${a?.messagingFlags?.join(", ") || "—"}. Review themes: ${a?.reviewThemes?.join("; ") || "—"}. Release watch: ${a?.releaseWatch ?? "—"}.`;
     })
     .join("\n");
-  try {
-    const resp = await client.messages.create({
-      model,
-      max_tokens: 1200,
-      tools: [SNAPSHOT_TOOL],
-      tool_choice: { type: "tool", name: "submit_market_snapshot" },
-      messages: [{ role: "user", content: `${PHYT_CONTEXT}\n\nCOMPETITOR SET:\n${digest}\n\nSubmit the market snapshot and prioritised actions for PHYT via the tool.` }],
-    });
-    const block = resp.content.find((b) => b.type === "tool_use");
-    if (!block || block.type !== "tool_use") return { snapshot: "", actions: [] };
-    const out = block.input as { snapshot: string; actions: CompetitorAction[] };
-    return { snapshot: out.snapshot ?? "", actions: out.actions ?? [] };
-  } catch {
-    return { snapshot: "", actions: [] };
-  }
+  const resp = await client.messages.create({
+    model,
+    max_tokens: 1200,
+    tools: [SNAPSHOT_TOOL],
+    tool_choice: { type: "tool", name: "submit_market_snapshot" },
+    messages: [{ role: "user", content: `${PHYT_CONTEXT}\n\nCOMPETITOR SET:\n${digest}\n\nSubmit the market snapshot and prioritised actions for PHYT via the tool.` }],
+  });
+  const block = resp.content.find((b) => b.type === "tool_use");
+  if (!block || block.type !== "tool_use") throw new Error("no tool_use block in Claude response");
+  const out = block.input as { snapshot: string; actions: CompetitorAction[] };
+  return { snapshot: out.snapshot ?? "", actions: out.actions ?? [] };
 }
 
 /** Build the full competitor report: fetch all apps + Claude analysis + snapshot. */
@@ -275,11 +272,19 @@ export async function buildCompetitorReport(env: Env): Promise<CompetitorReport>
     }),
   );
 
-  // Analyse each (in parallel) when Claude is available.
+  // Analyse each (in parallel) when Claude is available. Capture the first error
+  // so a mis-configured key surfaces instead of silently showing "pending".
+  let aiError: string | undefined;
   const analyses = await Promise.all(
-    apps.map(({ seed, app }) =>
-      client && app ? analyseCompetitor(seed, app, client, model) : Promise.resolve(null),
-    ),
+    apps.map(async ({ seed, app }) => {
+      if (!client || !app) return null;
+      try {
+        return await analyseCompetitor(seed, app, client, model);
+      } catch (e) {
+        if (!aiError) aiError = e instanceof Error ? e.message : "Claude analysis failed";
+        return null;
+      }
+    }),
   );
 
   const competitors: CompetitorEntry[] = apps.map(({ seed, app, error }, i) => ({
@@ -289,13 +294,22 @@ export async function buildCompetitorReport(env: Env): Promise<CompetitorReport>
     error,
   }));
 
-  const { snapshot, actions } = client
-    ? await marketSnapshot(competitors, client, model)
-    : { snapshot: "", actions: [] };
+  let snapshot = "";
+  let actions: CompetitorAction[] = [];
+  if (client) {
+    try {
+      const s = await marketSnapshot(competitors, client, model);
+      snapshot = s.snapshot;
+      actions = s.actions;
+    } catch (e) {
+      if (!aiError) aiError = e instanceof Error ? e.message : "Claude snapshot failed";
+    }
+  }
 
   return {
     generatedAt: new Date().toISOString(),
     aiEnabled: Boolean(client),
+    aiError,
     snapshot,
     actions,
     competitors,
