@@ -56,7 +56,7 @@ export interface CompetitorAnalysis {
   messagingFlags: string[];
   reviewThemes: string[];
   releaseWatch: string;
-  vsPhyt: string;
+  vsPhyt: string[];
 }
 
 export interface CompetitorEntry extends CompetitorSeed {
@@ -74,13 +74,24 @@ export interface CompetitorReport {
   generatedAt: string;
   aiEnabled: boolean;
   aiError?: string; // set when a Claude key is present but the calls failed
-  snapshot: string;
+  snapshot: string[];
   actions: CompetitorAction[];
   competitors: CompetitorEntry[];
 }
 
 // PHYT positioning — anchors the "vs PHYT" analysis (from the client brief).
 const PHYT_CONTEXT = `PHYT is a UK computer-vision body-composition scanning app: an AI photo scan, DEXA-validated, ~3.1% mean absolute error. It targets accuracy-focused users and GLP-1 users who want to track body-composition change (muscle/fat), not just weight. Differentiators: scan accuracy vs BIA smart scales (which are inconsistent), clinical validation, and GLP-1 body-composition messaging.`;
+
+// Writing style for everything Claude returns. Plain, skimmable, no AI tells.
+const STYLE = `WRITING STYLE: Write like a person talking to a colleague, not a marketer. Short, plain sentences. Never use em dashes or en dashes; use commas or full stops. Ban filler and AI-speak: "leverage", "robust", "seamless", "landscape", "in today's", "it's worth noting", "delve", "unlock", "elevate", "poised to", "when it comes to". Say the concrete thing.`;
+
+// Safety net: strip any dashes that slip through and tidy whitespace.
+function plain(s: string): string {
+  return (s || "").replace(/\s*[—–]\s*/g, ", ").replace(/\s{2,}/g, " ").trim();
+}
+function plainArr(a: string[] | undefined): string[] {
+  return (a ?? []).map(plain).filter(Boolean);
+}
 
 // Priority set chosen for v1 (resolved App Store IDs). Editable-in-Settings later.
 export const COMPETITOR_SEED: CompetitorSeed[] = [
@@ -157,13 +168,13 @@ const ANALYSIS_TOOL: Anthropic.Tool = {
   input_schema: {
     type: "object",
     properties: {
-      summary: { type: "string", description: "A single punchy sentence TL;DR of this competitor for a busy media buyer — who they are, their angle, and the headline threat/opportunity for PHYT." },
+      summary: { type: "string", description: "One plain-English sentence: who they are, their angle, and the headline threat or opportunity for PHYT. No dashes, no jargon." },
       inferredKeywords: { type: "array", items: { type: "string" }, description: "6-12 App Store search terms this app is clearly optimising for, inferred from its name/description." },
-      positioning: { type: "string", description: "1-2 sentences on how the app positions itself." },
+      positioning: { type: "string", description: "One or two plain sentences on how the app positions itself." },
       messagingFlags: { type: "array", items: { type: "string" }, description: "Notable angles present, e.g. 'GLP-1 language', 'clinical/DEXA', 'body-composition claims', 'BIA smart-scale'. Empty if none." },
       reviewThemes: { type: "array", items: { type: "string" }, description: "3-6 recurring themes from reviews (praise or, especially, frustrations like accuracy/BIA inconsistency)." },
-      releaseWatch: { type: "string", description: "Any notable recent feature/roadmap signal from the release notes to watch (esp. body-composition or scanning features), else '—'." },
-      vsPhyt: { type: "string", description: "The gap or opportunity for PHYT vs this competitor, 1-2 sentences." },
+      releaseWatch: { type: "string", description: "Any notable recent feature/roadmap signal from the release notes to watch (esp. body-composition or scanning features). Empty string if nothing notable." },
+      vsPhyt: { type: "array", items: { type: "string" }, description: "2-4 short bullet points on the gaps or opportunities for PHYT vs this competitor. Each bullet one plain sentence." },
     },
     required: ["summary", "inferredKeywords", "positioning", "messagingFlags", "reviewThemes", "releaseWatch", "vsPhyt"],
   },
@@ -193,7 +204,9 @@ ${app.releaseNotes.slice(0, 600) || "—"}
 RECENT REVIEWS:
 ${reviewText || "(no reviews available)"}
 
-Analyse this competitor from an Apple Search Ads / ASO angle for PHYT and submit via the tool.`;
+Analyse this competitor from an Apple Search Ads / ASO angle for PHYT and submit via the tool.
+
+${STYLE}`;
   const resp = await client.messages.create({
     model,
     max_tokens: 1200,
@@ -203,7 +216,16 @@ Analyse this competitor from an Apple Search Ads / ASO angle for PHYT and submit
   });
   const block = resp.content.find((b) => b.type === "tool_use");
   if (!block || block.type !== "tool_use") throw new Error("no tool_use block in Claude response");
-  return block.input as CompetitorAnalysis;
+  const a = block.input as CompetitorAnalysis;
+  return {
+    summary: plain(a.summary),
+    inferredKeywords: a.inferredKeywords ?? [],
+    positioning: plain(a.positioning),
+    messagingFlags: a.messagingFlags ?? [],
+    reviewThemes: plainArr(a.reviewThemes),
+    releaseWatch: plain(a.releaseWatch),
+    vsPhyt: plainArr(a.vsPhyt),
+  };
 }
 
 const SNAPSHOT_TOOL: Anthropic.Tool = {
@@ -212,7 +234,7 @@ const SNAPSHOT_TOOL: Anthropic.Tool = {
   input_schema: {
     type: "object",
     properties: {
-      snapshot: { type: "string", description: "2-4 sentences on where PHYT sits vs this competitor set and the key threats/openings." },
+      snapshot: { type: "array", items: { type: "string" }, description: "3-5 short bullet points on where PHYT sits vs this competitor set and the key threats and openings. Each bullet one plain sentence, no preamble, no dashes." },
       actions: {
         type: "array",
         items: {
@@ -234,12 +256,12 @@ async function marketSnapshot(
   entries: CompetitorEntry[],
   client: Anthropic,
   model: string,
-): Promise<{ snapshot: string; actions: CompetitorAction[] }> {
+): Promise<{ snapshot: string[]; actions: CompetitorAction[] }> {
   const digest = entries
     .filter((e) => e.app)
     .map((e) => {
       const a = e.analysis;
-      return `${e.name} (${e.group}, ${e.priority}) — ${a?.positioning ?? e.app!.description.slice(0, 160)}. Flags: ${a?.messagingFlags?.join(", ") || "—"}. Review themes: ${a?.reviewThemes?.join("; ") || "—"}. Release watch: ${a?.releaseWatch ?? "—"}.`;
+      return `${e.name} (${e.group}, ${e.priority}): ${a?.positioning ?? e.app!.description.slice(0, 160)}. Flags: ${a?.messagingFlags?.join(", ") || "none"}. Review themes: ${a?.reviewThemes?.join("; ") || "none"}. Release watch: ${a?.releaseWatch || "none"}.`;
     })
     .join("\n");
   const resp = await client.messages.create({
@@ -247,12 +269,15 @@ async function marketSnapshot(
     max_tokens: 1200,
     tools: [SNAPSHOT_TOOL],
     tool_choice: { type: "tool", name: "submit_market_snapshot" },
-    messages: [{ role: "user", content: `${PHYT_CONTEXT}\n\nCOMPETITOR SET:\n${digest}\n\nSubmit the market snapshot and prioritised actions for PHYT via the tool.` }],
+    messages: [{ role: "user", content: `${PHYT_CONTEXT}\n\nCOMPETITOR SET:\n${digest}\n\nSubmit the market snapshot and prioritised actions for PHYT via the tool.\n\n${STYLE}` }],
   });
   const block = resp.content.find((b) => b.type === "tool_use");
   if (!block || block.type !== "tool_use") throw new Error("no tool_use block in Claude response");
-  const out = block.input as { snapshot: string; actions: CompetitorAction[] };
-  return { snapshot: out.snapshot ?? "", actions: out.actions ?? [] };
+  const out = block.input as { snapshot: string[]; actions: CompetitorAction[] };
+  return {
+    snapshot: plainArr(out.snapshot),
+    actions: (out.actions ?? []).map((a) => ({ priority: a.priority, text: plain(a.text) })),
+  };
 }
 
 /** Build the full competitor report: fetch all apps + Claude analysis + snapshot. */
@@ -328,7 +353,7 @@ export async function buildCompetitorReport(env: Env): Promise<CompetitorReport>
     error,
   }));
 
-  let snapshot = "";
+  let snapshot: string[] = [];
   let actions: CompetitorAction[] = [];
   if (client) {
     try {

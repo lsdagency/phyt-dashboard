@@ -10,6 +10,12 @@ import type {
 
 const fetcher = (u: string) => fetch(u).then((r) => r.json());
 
+/** Tolerate both the new bullet arrays and any string values from an older cached report. */
+function toList(v: string[] | string | undefined | null): string[] {
+  if (Array.isArray(v)) return v.filter(Boolean);
+  return v ? [v] : [];
+}
+
 const PRIORITY_DOT: Record<CompetitorPriority, string> = {
   high: "bg-phyt-pink-soft",
   medium: "bg-phyt-yellow-soft",
@@ -97,16 +103,26 @@ function CompetitorCard({ c }: { c: CompetitorEntry }) {
               </ul>
             </div>
           )}
-          {a.releaseWatch && a.releaseWatch !== "—" && (
+          {a.releaseWatch && !["—", ",", "-", "none"].includes(a.releaseWatch.trim().toLowerCase()) && (
             <div className="rounded-lg bg-phyt-yellow-soft px-3 py-2 text-xs">
               <span className="font-medium">Release watch: </span>
               {a.releaseWatch}
             </div>
           )}
-          <div className="rounded-lg bg-phyt-green-soft px-3 py-2 text-xs">
-            <span className="font-medium">vs PHYT: </span>
-            {a.vsPhyt}
-          </div>
+          {(() => {
+            const items = toList(a.vsPhyt);
+            if (items.length === 0) return null;
+            return (
+              <div className="rounded-lg bg-phyt-green-soft px-3 py-2 text-xs">
+                <div className="font-medium">vs PHYT</div>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4 text-phyt-ink/80">
+                  {items.map((v, i) => (
+                    <li key={i}>{v}</li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
         </div>
       ) : (
         <p className="mt-3 text-xs text-phyt-ink/45">
@@ -204,10 +220,16 @@ export default function CompetitorOverview({ isAdmin }: { isAdmin: boolean }) {
       </div>
 
       {/* Market snapshot + actions */}
-      {(data.snapshot || data.actions?.length > 0) && (
+      {(toList(data.snapshot).length > 0 || data.actions?.length > 0) && (
         <div className="rounded-2xl border border-phyt-ink/10 bg-white p-5">
           <h3 className="text-lg font-display font-bold">Market snapshot</h3>
-          {data.snapshot && <p className="mt-2 text-sm text-phyt-ink/80">{data.snapshot}</p>}
+          {toList(data.snapshot).length > 0 && (
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-phyt-ink/80">
+              {toList(data.snapshot).map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+            </ul>
+          )}
           {data.actions?.length > 0 && (
             <>
               <div className="mt-4 text-[11px] uppercase tracking-wide text-phyt-ink/50">
