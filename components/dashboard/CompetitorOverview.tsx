@@ -83,7 +83,6 @@ function CompetitorCard({ c }: { c: CompetitorEntry }) {
           {a.summary && (
             <p className="font-medium text-phyt-ink">{a.summary}</p>
           )}
-          <p className="text-phyt-ink/70">{a.positioning}</p>
           {a.messagingFlags?.length > 0 && (
             <Chips items={a.messagingFlags} tint="bg-phyt-blue-soft" />
           )}
@@ -190,13 +189,11 @@ export default function CompetitorOverview({ isAdmin }: { isAdmin: boolean }) {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm text-phyt-ink/55">
-            Public App Store intelligence (listings + reviews), analysed for PHYT.
-            {" "}
-            {data.generatedAt && (
-              <>Updated {new Date(data.generatedAt).toLocaleDateString("en-GB")}.</>
-            )}
-          </p>
+          {data.generatedAt && (
+            <p className="text-sm text-phyt-ink/55">
+              Updated {new Date(data.generatedAt).toLocaleDateString("en-GB")}
+            </p>
+          )}
           {!data.aiEnabled && (
             <p className="mt-1 text-xs text-phyt-ink/45">
               Showing listings only — add an Anthropic key in Settings for the AI analysis.
@@ -219,42 +216,15 @@ export default function CompetitorOverview({ isAdmin }: { isAdmin: boolean }) {
         )}
       </div>
 
-      {/* Market snapshot + actions */}
-      {(toList(data.snapshot).length > 0 || data.actions?.length > 0) && (
+      {/* Market snapshot */}
+      {toList(data.snapshot).length > 0 && (
         <div className="rounded-2xl border border-phyt-ink/10 bg-white p-5">
           <h3 className="text-lg font-display font-bold">Market snapshot</h3>
-          {toList(data.snapshot).length > 0 && (
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-phyt-ink/80">
-              {toList(data.snapshot).map((s, i) => (
-                <li key={i}>{s}</li>
-              ))}
-            </ul>
-          )}
-          {data.actions?.length > 0 && (
-            <>
-              <div className="mt-4 text-[11px] uppercase tracking-wide text-phyt-ink/50">
-                Actions this week
-              </div>
-              <ul className="mt-2 space-y-2">
-                {data.actions.map((ac, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm">
-                    <span
-                      className={`mt-0.5 rounded-full px-2 py-0.5 text-[10px] uppercase ${
-                        ac.priority === "high"
-                          ? "bg-phyt-pink-soft"
-                          : ac.priority === "medium"
-                            ? "bg-phyt-yellow-soft"
-                            : "bg-phyt-ink/5"
-                      }`}
-                    >
-                      {ac.priority}
-                    </span>
-                    <span className="text-phyt-ink/80">{ac.text}</span>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-phyt-ink/80">
+            {toList(data.snapshot).map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ul>
         </div>
       )}
 
