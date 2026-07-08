@@ -201,7 +201,26 @@ function sumGranularity(rows: AsaMetricBlock[]): AsaMetricBlock {
   );
 }
 
-function reportBody(range: DateRange, granularity?: "DAILY") {
+type Granularity = "DAILY" | "WEEKLY" | "MONTHLY";
+
+/**
+ * Pick the finest granularity Apple allows for the range, so custom ranges
+ * don't 400. Apple's constraints:
+ *   DAILY   — span <= 90 days AND start within the last 90 days
+ *   WEEKLY  — span 15-365 days, start within 24 months
+ *   MONTHLY — span > ~3 months, start within 24 months
+ */
+function granularityFor(range: DateRange): Granularity {
+  const start = Date.parse(`${range.start}T00:00:00Z`);
+  const end = Date.parse(`${range.end}T00:00:00Z`);
+  const span = Math.round((end - start) / 86_400_000) + 1;
+  const startAgeDays = Math.round((Date.now() - start) / 86_400_000);
+  if (span <= 90 && startAgeDays <= 90) return "DAILY";
+  if (span > 365) return "MONTHLY";
+  return "WEEKLY";
+}
+
+function reportBody(range: DateRange, granularity?: Granularity) {
   return {
     startTime: range.start,
     endTime: range.end,
@@ -222,8 +241,10 @@ export async function getAsaData(range: DateRange, env: Env): Promise<AsaData> {
   if (!c) return sampleAsa(range);
 
   try {
-    // 1. Campaigns with DAILY granularity — gives us both per-campaign totals and the daily timeseries.
-    const campaignsReport = (await postReport(c, "/reports/campaigns", reportBody(range, "DAILY"))) as {
+    // 1. Campaigns with the finest granularity the range allows (Apple caps
+    //    DAILY at 90 days) — gives per-campaign totals plus the timeseries.
+    const gran = granularityFor(range);
+    const campaignsReport = (await postReport(c, "/reports/campaigns", reportBody(range, gran))) as {
       data?: { reportingDataResponse?: { row?: CampaignRow[] } };
     };
     const rows = campaignsReport.data?.reportingDataResponse?.row ?? [];
