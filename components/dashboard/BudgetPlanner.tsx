@@ -77,8 +77,9 @@ export default function BudgetPlanner({
         <div>
           <h2 className="text-2xl">Budget planner</h2>
           <p className="text-sm text-phyt-ink/55">
-            Run rate is average daily spend over the period. Edit budgets to model,
-            or enter a total to split across campaigns by performance.
+            Daily budgets are pulled live from Apple Search Ads. Run rate is
+            average daily spend over the period. Edit any budget to model a
+            change, or enter a total to split across campaigns by performance.
           </p>
         </div>
         <div>

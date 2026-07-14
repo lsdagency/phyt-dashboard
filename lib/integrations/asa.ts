@@ -146,6 +146,48 @@ async function postReport(
   return res.json();
 }
 
+async function getJson(
+  c: NonNullable<ReturnType<typeof creds>>,
+  path: string,
+) {
+  const token = await getAccessToken(c);
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-AP-Context": `orgId=${c.orgId}`,
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`ASA GET ${path} failed: ${res.status} ${await res.text()}`);
+  }
+  return res.json();
+}
+
+/**
+ * Daily budgets aren't reliably present in the reporting metadata, so read them
+ * from the Campaign Management API (the source of truth). Returns campaignId ->
+ * daily budget. Never throws — budgets are a nice-to-have on top of reporting.
+ */
+async function fetchCampaignBudgets(
+  c: NonNullable<ReturnType<typeof creds>>,
+): Promise<Record<string, number>> {
+  try {
+    const res = (await getJson(c, "/campaigns?limit=1000")) as {
+      data?: {
+        id?: number | string;
+        dailyBudgetAmount?: { amount?: string };
+      }[];
+    };
+    const map: Record<string, number> = {};
+    for (const camp of res.data ?? []) {
+      if (camp.id != null) map[String(camp.id)] = money(camp.dailyBudgetAmount);
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
 // Apple money fields are { amount: "12.34", currency: "USD" }.
 const money = (m: { amount?: string } | undefined) => Number(m?.amount ?? 0);
 const round = (n: number, dp = 2) => Math.round(n * 10 ** dp) / 10 ** dp;
@@ -243,10 +285,12 @@ export async function getAsaData(range: DateRange, env: Env): Promise<AsaData> {
   try {
     // 1. Campaigns with the finest granularity the range allows (Apple caps
     //    DAILY at 90 days) — gives per-campaign totals plus the timeseries.
+    //    In parallel, pull daily budgets from the Campaign Management API.
     const gran = granularityFor(range);
-    const campaignsReport = (await postReport(c, "/reports/campaigns", reportBody(range, gran))) as {
-      data?: { reportingDataResponse?: { row?: CampaignRow[] } };
-    };
+    const [campaignsReport, budgetMap] = (await Promise.all([
+      postReport(c, "/reports/campaigns", reportBody(range, gran)),
+      fetchCampaignBudgets(c),
+    ])) as [{ data?: { reportingDataResponse?: { row?: CampaignRow[] } } }, Record<string, number>];
     const rows = campaignsReport.data?.reportingDataResponse?.row ?? [];
 
     const campaigns: AsaCampaign[] = [];
@@ -260,7 +304,10 @@ export async function getAsaData(range: DateRange, env: Env): Promise<AsaData> {
         id: String(row.metadata?.campaignId ?? ""),
         name: row.metadata?.campaignName ?? "Campaign",
         status: row.metadata?.campaignStatus ?? "",
-        dailyBudget: money(row.metadata?.dailyBudgetAmount),
+        // Prefer the Campaign Management budget; fall back to reporting metadata.
+        dailyBudget:
+          budgetMap[String(row.metadata?.campaignId ?? "")] ??
+          money(row.metadata?.dailyBudgetAmount),
         ...t,
         // Revenue attribution filled by derive.ts (real attribution or install-share).
         trials: 0,
